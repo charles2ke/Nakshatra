@@ -30,6 +30,8 @@ data:
   ReverseProxy__Clusters__billing__Destinations__d1__Address: "http://billing:8080"
   ReverseProxy__Clusters__media__Destinations__d1__Address: "http://media:8080"
   ReverseProxy__Clusters__inventory__Destinations__d1__Address: "http://inventory:8080"
+  ReverseProxy__Clusters__supplychain__Destinations__d1__Address: "http://supplychain:8080"
+  ReverseProxy__Clusters__notification__Destinations__d1__Address: "http://notification:8080"
 ---
 # Placeholder secret. Replace with a sealed secret / external secret store in real environments;
 # never commit real connection strings or tokens.

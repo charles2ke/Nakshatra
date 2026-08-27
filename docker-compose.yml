@@ -89,6 +89,9 @@ services:
       ReverseProxy__Clusters__payment__Destinations__d1__Address: "http://payment:8080"
       ReverseProxy__Clusters__billing__Destinations__d1__Address: "http://billing:8080"
       ReverseProxy__Clusters__media__Destinations__d1__Address: "http://media:8080"
+      ReverseProxy__Clusters__inventory__Destinations__d1__Address: "http://inventory:8080"
+      ReverseProxy__Clusters__supplychain__Destinations__d1__Address: "http://supplychain:8080"
+      ReverseProxy__Clusters__notification__Destinations__d1__Address: "http://notification:8080"
     ports:
       - "5000:8080"
     healthcheck:
@@ -435,6 +438,99 @@ services:
       Media__StorageRoot: "/var/lib/nakshatra/media"
     volumes:
       - media-data:/var/lib/nakshatra/media
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:8080/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  inventory:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        SERVICE: Nakshatra.Inventory.Service
+        INSTALL_FFMPEG: "false"
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      Mongo__ConnectionString: "mongodb://mongo:27017"
+      Mongo__Database: "nakshatra"
+      Redis__ConnectionString: "redis:6379"
+      Kafka__BootstrapServers: "kafka:9092"
+      Cors__AllowedOrigins__0: "http://localhost:5173"
+      Cors__AllowedOrigins__1: "http://localhost:8080"
+      Services__Catalog: "http://catalog:8080"
+      Services__Recommendation: "http://recommendation:8080"
+      Services__Order: "http://order:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:8080/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  supplychain:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        SERVICE: Nakshatra.SupplyChain.Service
+        INSTALL_FFMPEG: "false"
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      Mongo__ConnectionString: "mongodb://mongo:27017"
+      Mongo__Database: "nakshatra"
+      Redis__ConnectionString: "redis:6379"
+      Kafka__BootstrapServers: "kafka:9092"
+      Cors__AllowedOrigins__0: "http://localhost:5173"
+      Cors__AllowedOrigins__1: "http://localhost:8080"
+      Services__Catalog: "http://catalog:8080"
+      Services__Recommendation: "http://recommendation:8080"
+      Services__Order: "http://order:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:8080/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  notification:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        SERVICE: Nakshatra.Notification.Service
+        INSTALL_FFMPEG: "false"
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      Mongo__ConnectionString: "mongodb://mongo:27017"
+      Mongo__Database: "nakshatra"
+      Redis__ConnectionString: "redis:6379"
+      Kafka__BootstrapServers: "kafka:9092"
+      Cors__AllowedOrigins__0: "http://localhost:5173"
+      Cors__AllowedOrigins__1: "http://localhost:8080"
+      Services__Catalog: "http://catalog:8080"
+      Services__Recommendation: "http://recommendation:8080"
+      Services__Order: "http://order:8080"
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O- http://localhost:8080/health || exit 1"]
       interval: 15s
