@@ -1,0 +1,20 @@
+{
+  "version": 2,
+  "dgSpecHash": "wFUqaTAl7uI=",
+  "success": true,
+  "projectFilePath": "/home/runner/work/Nakshatra/Nakshatra/backend/src/Nakshatra.Cart.Service/Nakshatra.Cart.Service.csproj",
+  "expectedPackageFiles": [
+    "/home/runner/.nuget/packages/confluent.kafka/2.15.0/confluent.kafka.2.15.0.nupkg.sha512",
+    "/home/runner/.nuget/packages/dnsclient/1.6.1/dnsclient.1.6.1.nupkg.sha512",
+    "/home/runner/.nuget/packages/librdkafka.redist/2.15.0/librdkafka.redist.2.15.0.nupkg.sha512",
+    "/home/runner/.nuget/packages/mongodb.bson/3.11.0/mongodb.bson.3.11.0.nupkg.sha512",
+    "/home/runner/.nuget/packages/mongodb.driver/3.11.0/mongodb.driver.3.11.0.nupkg.sha512",
+    "/home/runner/.nuget/packages/respite/3.1.31/respite.3.1.31.nupkg.sha512",
+    "/home/runner/.nuget/packages/sharpcompress/0.48.1/sharpcompress.0.48.1.nupkg.sha512",
+    "/home/runner/.nuget/packages/snappier/1.3.1/snappier.1.3.1.nupkg.sha512",
+    "/home/runner/.nuget/packages/stackexchange.redis/3.1.31/stackexchange.redis.3.1.31.nupkg.sha512",
+    "/home/runner/.nuget/packages/system.io.hashing/10.0.5/system.io.hashing.10.0.5.nupkg.sha512",
+    "/home/runner/.nuget/packages/zstdsharp.port/0.7.3/zstdsharp.port.0.7.3.nupkg.sha512"
+  ],
+  "logs": []
+}

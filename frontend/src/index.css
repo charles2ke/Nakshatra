@@ -1,0 +1,89 @@
+
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, sans-serif; background: #f5f5f5; color: #222; }
+
+.app-shell { display: flex; flex-direction: column; min-height: 100vh; }
+.app-header { display: flex; align-items: center; gap: 16px; padding: 0 24px; background: #1a1a2e; color: #eee; height: 56px; flex-wrap: wrap; }
+.header-brand { font-size: 1.3rem; font-weight: bold; color: #e2a04a; }
+nav { display: flex; gap: 8px; flex: 1; flex-wrap: wrap; }
+.nav-link { color: #ccc; text-decoration: none; padding: 4px 8px; border-radius: 4px; font-size: 0.9rem; }
+.nav-link:hover, .nav-link.active { background: #e2a04a; color: #000; }
+.app-main { flex: 1; padding: 24px; max-width: 1200px; margin: 0 auto; width: 100%; }
+
+.persona-switcher { position: relative; }
+.persona-switcher button { background: #e2a04a; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.85rem; }
+.persona-dropdown { position: absolute; right: 0; top: 100%; background: #fff; border: 1px solid #ddd; min-width: 220px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,.15); border-radius: 4px; }
+.persona-option { padding: 8px 12px; cursor: pointer; font-size: 0.9rem; }
+.persona-option:hover { background: #f0f0f0; }
+.persona-badge { font-size: 0.75rem; background: #1a1a2e; color: #e2a04a; padding: 1px 6px; border-radius: 10px; margin-left: 6px; }
+
+.search-bar { display: flex; gap: 8px; margin: 16px 0; }
+.search-bar input { flex: 1; padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
+.search-bar button, .btn-primary { padding: 8px 16px; background: #1a1a2e; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+.btn-primary:hover, .search-bar button:hover { background: #e2a04a; color: #000; }
+
+.product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin: 16px 0; }
+.product-card { background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,.08); transition: transform .15s; }
+.product-card:hover { transform: translateY(-2px); }
+.product-card a { text-decoration: none; color: inherit; display: block; padding: 8px; }
+.product-img { width: 100%; height: 140px; object-fit: cover; }
+.product-name { font-weight: 600; margin: 6px 0 2px; }
+.product-price { color: #1a1a2e; font-size: 1.1rem; font-weight: bold; }
+.product-category { font-size: 0.8rem; color: #888; }
+.btn-add-cart { width: 100%; padding: 8px; background: #e2a04a; border: none; cursor: pointer; font-size: 0.9rem; font-weight: 600; }
+.btn-add-cart:hover { background: #c97f1f; }
+
+.rec-strip { margin: 24px 0; }
+.rec-strip h3 { margin-bottom: 8px; }
+.rec-strip-items { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px; }
+.rec-strip-items .product-card { min-width: 160px; flex-shrink: 0; }
+
+.toast { position: fixed; bottom: 20px; right: 20px; background: #1a1a2e; color: #fff; padding: 12px 20px; border-radius: 8px; z-index: 200; }
+.error { background: #fdd; border: 1px solid #f88; padding: 8px 12px; border-radius: 4px; margin-bottom: 12px; }
+.restricted { padding: 40px; text-align: center; color: #888; font-size: 1.2rem; }
+
+.search-filters { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0; }
+.search-filters input { padding: 8px 10px; border: 1px solid #ccc; border-radius: 4px; }
+.search-filters button { padding: 8px 16px; background: #1a1a2e; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+
+.cart-table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+.cart-table th, .cart-table td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+.cart-table th { background: #f0f0f0; }
+#cart-subtotal { font-size: 1.2rem; margin: 8px 0; font-weight: bold; }
+
+.setup-form { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+.setup-form input, .setup-form select { padding: 8px 10px; border: 1px solid #ccc; border-radius: 4px; min-width: 160px; }
+.setup-form button { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; background: #1a1a2e; color: #fff; }
+.setup-table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+.setup-table th, .setup-table td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+.setup-table th { background: #f0f0f0; }
+.setup-table button { margin-right: 4px; padding: 4px 10px; border: none; border-radius: 3px; cursor: pointer; background: #1a1a2e; color: #fff; font-size: 0.8rem; }
+
+.order-card { background: #fff; border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+.order-card a { text-decoration: none; color: inherit; }
+.status-badge { display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 0.85rem; font-weight: 600; background: #ddd; margin: 4px 0; }
+.status-created { background: #e0f0ff; }
+.status-awaitingpayment { background: #fff0cc; }
+.status-paid { background: #d4edda; }
+.status-delivered { background: #c3e6cb; }
+.status-cancelled { background: #f8d7da; }
+
+.order-timeline { margin: 24px 0; }
+.timeline-item { display: flex; gap: 12px; padding: 8px 0; border-left: 3px solid #1a1a2e; padding-left: 16px; margin-bottom: 8px; }
+.timeline-status { font-weight: 600; min-width: 140px; }
+.timeline-time { color: #888; font-size: 0.85rem; }
+.timeline-note { color: #555; font-style: italic; }
+
+.invoice-card { background: #fff; border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+
+.shipments-board { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; }
+.shipment-card { background: #fff; border-radius: 8px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+.shipment-card button { margin-top: 10px; padding: 6px 14px; background: #1a1a2e; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+
+.product-detail-img { max-width: 400px; border-radius: 8px; }
+.order-items-table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+.order-items-table th, .order-items-table td { border: 1px solid #ddd; padding: 8px; }
+
+.checkout-page form, .checkout-page div { max-width: 480px; }
+textarea { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; margin: 8px 0; }
+select { padding: 8px; border: 1px solid #ccc; border-radius: 4px; margin: 8px 0; }

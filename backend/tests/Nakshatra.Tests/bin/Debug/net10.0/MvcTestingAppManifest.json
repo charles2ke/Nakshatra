@@ -1,0 +1,13 @@
+{
+  "Nakshatra.Billing.Service, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "\/home\/runner\/work\/Nakshatra\/Nakshatra\/backend\/src\/Nakshatra.Billing.Service",
+  "Nakshatra.Cart.Service, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "\/home\/runner\/work\/Nakshatra\/Nakshatra\/backend\/src\/Nakshatra.Cart.Service",
+  "Nakshatra.Catalog.Service, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "\/home\/runner\/work\/Nakshatra\/Nakshatra\/backend\/src\/Nakshatra.Catalog.Service",
+  "Nakshatra.Fulfillment.Service, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "\/home\/runner\/work\/Nakshatra\/Nakshatra\/backend\/src\/Nakshatra.Fulfillment.Service",
+  "Nakshatra.Order.Service, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "\/home\/runner\/work\/Nakshatra\/Nakshatra\/backend\/src\/Nakshatra.Order.Service",
+  "Nakshatra.Payment.Service, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "\/home\/runner\/work\/Nakshatra\/Nakshatra\/backend\/src\/Nakshatra.Payment.Service",
+  "Nakshatra.Recommendation.Service, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "\/home\/runner\/work\/Nakshatra\/Nakshatra\/backend\/src\/Nakshatra.Recommendation.Service",
+  "Nakshatra.Search.Service, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "\/home\/runner\/work\/Nakshatra\/Nakshatra\/backend\/src\/Nakshatra.Search.Service",
+  "Nakshatra.Shared, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "\/home\/runner\/work\/Nakshatra\/Nakshatra\/backend\/src\/Nakshatra.Shared",
+  "Nakshatra.User.Service, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "\/home\/runner\/work\/Nakshatra\/Nakshatra\/backend\/src\/Nakshatra.User.Service",
+  "Nakshatra.Vendor.Service, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": "\/home\/runner\/work\/Nakshatra\/Nakshatra\/backend\/src\/Nakshatra.Vendor.Service"
+}
