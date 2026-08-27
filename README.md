@@ -3,6 +3,10 @@
 Nakshatra is an online shopping platform: a .NET 10 microservice backend behind a single API
 gateway, plus a React + TypeScript portal for customers, vendors, admins and fulfillment agents.
 
+🌐 **Live portal: https://charles2ke.github.io/Nakshatra/** — the React portal published to
+GitHub Pages by [`.github/workflows/pages.yml`](.github/workflows/pages.yml). It is the frontend
+only; set the `VITE_API_BASE_URL` repository variable to a reachable gateway for live data.
+
 📐 **[Architecture & system design](docs/architecture.md)** — diagrams, service catalog, event
 flows and design trade-offs.
 
@@ -103,3 +107,13 @@ kubectl apply -f infra/k8s/
 Manifests create the `nakshatra` namespace, a ConfigMap with all routing and backing-store
 addresses, a Deployment plus ClusterIP Service per microservice, and the portal behind an
 Ingress. Replace the placeholder Secret with a real secret store before any non-local use.
+
+## Deploying the portal to GitHub Pages
+
+Pushes to `main` that touch `frontend/` build the portal and publish it to
+https://charles2ke.github.io/Nakshatra/ (Settings → Pages → Source: GitHub Actions).
+
+- `BASE_PATH` sets the Vite base so assets and routes resolve under `/Nakshatra/`.
+- `index.html` is copied to `404.html` so client-side routes survive a reload.
+- Set the `VITE_API_BASE_URL` repository variable to point the published portal at a
+  publicly reachable gateway; without it the portal falls back to `http://localhost:5000`.
