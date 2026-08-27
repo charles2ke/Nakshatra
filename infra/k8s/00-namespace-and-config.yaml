@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nakshatra
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nakshatra-config
+  namespace: nakshatra
+data:
+  Mongo__Database: "nakshatra"
+  Kafka__BootstrapServers: "kafka:9092"
+  Redis__ConnectionString: "redis:6379"
+  Services__Catalog: "http://catalog:8080"
+  Services__Recommendation: "http://recommendation:8080"
+  Services__Order: "http://order:8080"
+  Services__Inventory: "http://inventory:8080"
+  RateLimit__PermitsPerMinute: "600"
+  Cors__AllowedOrigins__0: "https://portal.nakshatra.example"
+  ReverseProxy__Clusters__user__Destinations__d1__Address: "http://user:8080"
+  ReverseProxy__Clusters__vendor__Destinations__d1__Address: "http://vendor:8080"
+  ReverseProxy__Clusters__catalog__Destinations__d1__Address: "http://catalog:8080"
+  ReverseProxy__Clusters__search__Destinations__d1__Address: "http://search:8080"
+  ReverseProxy__Clusters__cart__Destinations__d1__Address: "http://cart:8080"
+  ReverseProxy__Clusters__recommendation__Destinations__d1__Address: "http://recommendation:8080"
+  ReverseProxy__Clusters__order__Destinations__d1__Address: "http://order:8080"
+  ReverseProxy__Clusters__fulfillment__Destinations__d1__Address: "http://fulfillment:8080"
+  ReverseProxy__Clusters__payment__Destinations__d1__Address: "http://payment:8080"
+  ReverseProxy__Clusters__billing__Destinations__d1__Address: "http://billing:8080"
+  ReverseProxy__Clusters__media__Destinations__d1__Address: "http://media:8080"
+  ReverseProxy__Clusters__inventory__Destinations__d1__Address: "http://inventory:8080"
+---
+# Placeholder secret. Replace with a sealed secret / external secret store in real environments;
+# never commit real connection strings or tokens.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: nakshatra-secrets
+  namespace: nakshatra
+type: Opaque
+stringData:
+  Mongo__ConnectionString: "mongodb://mongo:27017"
+  Internal__Token: "replace-me"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nakshatra-media
+  namespace: nakshatra
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 50Gi

@@ -134,3 +134,37 @@ test('access restricted for wrong persona', async ({ page }) => {
   await expect(page.locator('[data-testid="access-restricted"]')).toBeVisible();
   await page.screenshot({ path: ss('access-restricted') });
 });
+
+test('switching to Spanish updates visible nav text', async ({ page }) => {
+  await mockAllApis(page);
+  await injectCustomerPersona(page);
+  // Inject Spanish locale before page load
+  await page.addInitScript(() => { localStorage.setItem('nakshatra_locale', 'es'); });
+  await page.goto('/');
+  await expect(page.locator('[data-testid="home-title"]')).toHaveText('Tienda Nakshatra');
+  await expect(page.locator('[data-testid="nav-home"]')).toHaveText('Inicio');
+  await expect(page.locator('[data-testid="nav-cart"]')).toHaveText('Carrito');
+  await page.screenshot({ path: 'e2e/screenshots/locale-es.png' });
+});
+
+test('switching to Hindi updates visible text', async ({ page }) => {
+  await mockAllApis(page);
+  await injectCustomerPersona(page);
+  await page.addInitScript(() => { localStorage.setItem('nakshatra_locale', 'hi'); });
+  await page.goto('/');
+  await expect(page.locator('[data-testid="home-title"]')).toHaveText('नक्षत्र शॉप');
+  await expect(page.locator('[data-testid="nav-home"]')).toHaveText('मुख्य पृष्ठ');
+  await page.screenshot({ path: 'e2e/screenshots/locale-hi.png' });
+});
+
+test('lang switcher dropdown changes locale live', async ({ page }) => {
+  await mockAllApis(page);
+  await injectCustomerPersona(page);
+  await page.goto('/');
+  // Default en
+  await expect(page.locator('[data-testid="home-title"]')).toHaveText('Nakshatra Shop');
+  // Switch to Spanish via select
+  await page.selectOption('[data-testid="lang-select"]', 'es');
+  await expect(page.locator('[data-testid="home-title"]')).toHaveText('Tienda Nakshatra');
+  await page.screenshot({ path: 'e2e/screenshots/locale-switcher-es.png' });
+});

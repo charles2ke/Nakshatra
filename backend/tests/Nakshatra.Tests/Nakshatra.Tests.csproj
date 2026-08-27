@@ -30,6 +30,10 @@
     <ProjectReference Include="..\..\src\Nakshatra.Fulfillment.Service\Nakshatra.Fulfillment.Service.csproj" />
     <ProjectReference Include="..\..\src\Nakshatra.Payment.Service\Nakshatra.Payment.Service.csproj" />
     <ProjectReference Include="..\..\src\Nakshatra.Billing.Service\Nakshatra.Billing.Service.csproj" />
+    <ProjectReference Include="..\..\src\Nakshatra.Media.Service\Nakshatra.Media.Service.csproj" />
+    <ProjectReference Include="..\..\src\Nakshatra.Inventory.Service\Nakshatra.Inventory.Service.csproj" />
+    <ProjectReference Include="..\..\src\Nakshatra.SupplyChain.Service\Nakshatra.SupplyChain.Service.csproj" />
+    <ProjectReference Include="..\..\src\Nakshatra.Notification.Service\Nakshatra.Notification.Service.csproj" />
   </ItemGroup>
 
 </Project>

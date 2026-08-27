@@ -8,6 +8,13 @@ public static class Topics
     public const string OrdersStatusChanged = "orders.status-changed";
     public const string PaymentsCompleted = "payments.completed";
     public const string CartItemAdded = "cart.item-added";
+    public const string MediaUploaded = "media.uploaded";
+    public const string MediaTranscoded = "media.transcoded";
+    public const string InventoryLow = "inventory.low";
+    public const string InventoryAdjusted = "inventory.adjusted";
+    public const string InventoryReplenishmentOrdered = "inventory.replenishment-ordered";
+    public const string SupplyChainEventRecorded = "supplychain.event-recorded";
+    public const string NotificationRequested = "notifications.requested";
 }
 
 public record EventEnvelope(string Topic, string Key, string Payload)

@@ -1,37 +1,46 @@
 import { Outlet, NavLink } from 'react-router-dom';
 import { usePersona } from '../context/PersonaContext';
 import PersonaSwitcher from './PersonaSwitcher';
+import LanguageSwitcher from './LanguageSwitcher';
+import { useLocale } from '../i18n/LocaleContext';
 import type { Persona } from '../api/client';
 
-interface NavItem { label: string; to: string; allow: Persona[]; }
+interface NavItem { key: string; labelKey: string; to: string; allow: Persona[]; }
 const NAV: NavItem[] = [
-  { label: 'Home', to: '/', allow: ['Customer','Vendor','Admin','FulfillmentAgent'] },
-  { label: 'Search', to: '/search', allow: ['Customer','Admin'] },
-  { label: 'Cart', to: '/cart', allow: ['Customer','Admin'] },
-  { label: 'Orders', to: '/orders', allow: ['Customer','Vendor','Admin','FulfillmentAgent'] },
-  { label: 'Billing', to: '/billing', allow: ['Customer','Vendor','Admin'] },
-  { label: 'Fulfillment', to: '/fulfillment', allow: ['FulfillmentAgent','Admin'] },
-  { label: 'Products Setup', to: '/setup/products', allow: ['Vendor','Admin'] },
-  { label: 'Vendors Setup', to: '/setup/vendors', allow: ['Admin'] },
-  { label: 'Users Setup', to: '/setup/users', allow: ['Admin'] },
+  { key: 'home',             labelKey: 'nav.home',           to: '/',               allow: ['Customer','Vendor','Admin','FulfillmentAgent'] },
+  { key: 'search',           labelKey: 'nav.search',         to: '/search',         allow: ['Customer','Admin'] },
+  { key: 'cart',             labelKey: 'nav.cart',           to: '/cart',           allow: ['Customer','Admin'] },
+  { key: 'orders',           labelKey: 'nav.orders',         to: '/orders',         allow: ['Customer','Vendor','Admin','FulfillmentAgent'] },
+  { key: 'billing',          labelKey: 'nav.billing',        to: '/billing',        allow: ['Customer','Vendor','Admin'] },
+  { key: 'fulfillment',      labelKey: 'nav.fulfillment',    to: '/fulfillment',    allow: ['FulfillmentAgent','Admin'] },
+  { key: 'products-setup',   labelKey: 'nav.setup.products', to: '/setup/products', allow: ['Vendor','Admin'] },
+  { key: 'vendors-setup',    labelKey: 'nav.setup.vendors',  to: '/setup/vendors',  allow: ['Admin'] },
+  { key: 'users-setup',      labelKey: 'nav.setup.users',    to: '/setup/users',    allow: ['Admin'] },
 ];
 
 export default function Layout() {
   const { currentUser } = usePersona();
+  const { t } = useLocale();
 
   const visibleNav = NAV.filter(n => currentUser && n.allow.includes(currentUser.persona));
 
   return (
     <div className="app-shell">
       <header className="app-header" data-testid="app-header">
-        <div className="header-brand">🌟 Nakshatra</div>
+        <div className="header-brand">🌟 {t('brand')}</div>
         <nav data-testid="main-nav">
           {visibleNav.map(n => (
-            <NavLink key={n.to} to={n.to} className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'} data-testid={`nav-${n.label.toLowerCase().replace(/ /g, '-')}`}>
-              {n.label}
+            <NavLink
+              key={n.to}
+              to={n.to}
+              className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}
+              data-testid={`nav-${n.key}`}
+            >
+              {t(n.labelKey)}
             </NavLink>
           ))}
         </nav>
+        <LanguageSwitcher />
         <PersonaSwitcher />
       </header>
       <main className="app-main">

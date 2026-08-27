@@ -87,3 +87,7 @@ nav { display: flex; gap: 8px; flex: 1; flex-wrap: wrap; }
 .checkout-page form, .checkout-page div { max-width: 480px; }
 textarea { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; margin: 8px 0; }
 select { padding: 8px; border: 1px solid #ccc; border-radius: 4px; margin: 8px 0; }
+
+.lang-switcher { display: flex; align-items: center; gap: 6px; }
+.lang-label { color: #ccc; font-size: 0.8rem; white-space: nowrap; }
+.lang-switcher select { padding: 4px 6px; border: none; border-radius: 4px; background: #fff; font-size: 0.85rem; cursor: pointer; }

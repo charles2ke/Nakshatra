@@ -56,6 +56,37 @@ app.MapPost("/api/products/{id}/reserve", async (string id, ReserveStockRequest 
     return Results.Ok(product);
 });
 
+// Product reviews. Review photos and videos are uploaded to the media service, which transcodes
+// them asynchronously; only the resulting media ids are stored here.
+app.MapGet("/api/products/{productId}/reviews", async (string productId, IDocumentRepository<Review> repo, CancellationToken ct) =>
+    Results.Ok((await repo.FindAsync(r => r.ProductId == productId, ct)).OrderByDescending(r => r.CreatedAt).ToList()));
+
+app.MapPost("/api/products/{productId}/reviews", async (
+    string productId,
+    Review review,
+    IDocumentRepository<Product> products,
+    IDocumentRepository<Review> repo,
+    ICacheService cache,
+    CancellationToken ct) =>
+{
+    if (await products.GetAsync(productId, ct) is null)
+    {
+        return Results.NotFound(new { error = $"Product '{productId}' was not found." });
+    }
+
+    if (review.Rating is < 1 or > 5)
+    {
+        return Results.BadRequest(new { error = "Rating must be between 1 and 5." });
+    }
+
+    review.Id = Guid.NewGuid().ToString("N");
+    review.ProductId = productId;
+    review.CreatedAt = DateTime.UtcNow;
+    await repo.UpsertAsync(review, ct);
+    await cache.RemoveAsync($"reviews:{productId}");
+    return Results.Created($"/api/products/{productId}/reviews/{review.Id}", review);
+});
+
 await SeedData.SeedAsync(app.Services, SeedData.Products);
 app.Run();
 

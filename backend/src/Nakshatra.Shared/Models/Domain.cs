@@ -167,3 +167,66 @@ public class Invoice : IEntity
     public DateTime IssuedAt { get; set; } = DateTime.UtcNow;
     public bool Paid { get; set; }
 }
+
+public enum MediaOwnerType
+{
+    Product,
+    Review
+}
+
+public enum MediaKind
+{
+    Image,
+    Video
+}
+
+public enum MediaStatus
+{
+    Pending,
+    Processing,
+    Ready,
+    Failed
+}
+
+public class MediaRendition
+{
+    /// <summary>Rendition name, e.g. "thumbnail", "web", "hls-720p".</summary>
+    public string Name { get; set; } = string.Empty;
+    public string Format { get; set; } = string.Empty;
+    public string Url { get; set; } = string.Empty;
+    public int Width { get; set; }
+    public int Height { get; set; }
+    public long SizeBytes { get; set; }
+}
+
+/// <summary>An uploaded product or review image/video and its transcoded renditions.</summary>
+public class MediaAsset : IEntity
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public MediaOwnerType OwnerType { get; set; }
+    public string OwnerId { get; set; } = string.Empty;
+    public string OriginalFileName { get; set; } = string.Empty;
+    public string ContentType { get; set; } = string.Empty;
+    public MediaKind Kind { get; set; }
+    public long SizeBytes { get; set; }
+    /// <summary>Storage key of the uploaded original; never a client supplied path.</summary>
+    public string StorageKey { get; set; } = string.Empty;
+    public MediaStatus Status { get; set; } = MediaStatus.Pending;
+    public List<MediaRendition> Renditions { get; set; } = new();
+    public string Error { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>Customer review for a product, optionally carrying transcoded media.</summary>
+public class Review : IEntity
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public string ProductId { get; set; } = string.Empty;
+    public string UserId { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string Body { get; set; } = string.Empty;
+    public int Rating { get; set; }
+    public List<string> MediaIds { get; set; } = new();
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}

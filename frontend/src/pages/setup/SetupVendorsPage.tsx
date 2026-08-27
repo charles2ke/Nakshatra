@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { getVendors, createVendor, updateVendor } from '../../api/client';
 import type { Vendor } from '../../api/client';
+import { useLocale } from '../../i18n/LocaleContext';
 
 const EMPTY: Omit<Vendor,'id'> = { name:'', email:'', phone:'', address:'', rating:0, active:true };
 
 export default function SetupVendorsPage() {
+  const { t } = useLocale();
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [form, setForm] = useState<Omit<Vendor,'id'>>(EMPTY);
   const [editId, setEditId] = useState<string|null>(null);
@@ -27,24 +29,29 @@ export default function SetupVendorsPage() {
 
   return (
     <div data-testid="setup-vendors-page">
-      <h1>Vendors Setup</h1>
+      <h1>{t('setup.vendors.title')}</h1>
       {error && <div className="error">{error}</div>}
       <form onSubmit={handleSubmit} data-testid="vendor-form" className="setup-form">
-        <input data-testid="vendor-form-name" placeholder="Name" required {...field('name')} />
-        <input data-testid="vendor-form-email" placeholder="Email" type="email" {...field('email')} />
-        <input data-testid="vendor-form-phone" placeholder="Phone" {...field('phone')} />
-        <input data-testid="vendor-form-address" placeholder="Address" {...field('address')} />
-        <button type="submit" data-testid="vendor-form-submit">{editId ? 'Update' : 'Create'}</button>
-        {editId && <button type="button" onClick={() => { setEditId(null); setForm(EMPTY); }}>Cancel</button>}
+        <input data-testid="vendor-form-name" placeholder={t('setup.vendors.form.name')} required {...field('name')} />
+        <input data-testid="vendor-form-email" placeholder={t('setup.vendors.form.email')} type="email" {...field('email')} />
+        <input data-testid="vendor-form-phone" placeholder={t('setup.vendors.form.phone')} {...field('phone')} />
+        <input data-testid="vendor-form-address" placeholder={t('setup.vendors.form.address')} {...field('address')} />
+        <button type="submit" data-testid="vendor-form-submit">{editId ? t('setup.vendors.update') : t('setup.vendors.create')}</button>
+        {editId && <button type="button" onClick={() => { setEditId(null); setForm(EMPTY); }}>{t('setup.vendors.cancel')}</button>}
       </form>
       <table className="setup-table" data-testid="vendors-table">
-        <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Actions</th></tr></thead>
+        <thead><tr>
+          <th>{t('setup.vendors.col.name')}</th>
+          <th>{t('setup.vendors.col.email')}</th>
+          <th>{t('setup.vendors.col.phone')}</th>
+          <th>{t('setup.vendors.col.actions')}</th>
+        </tr></thead>
         <tbody>
           {vendors.map(v => (
             <tr key={v.id} data-testid={`vendor-row-${v.id}`}>
               <td>{v.name}</td><td>{v.email}</td><td>{v.phone}</td>
               <td>
-                <button data-testid={`edit-vendor-${v.id}`} onClick={() => { setEditId(v.id); const {id,...rest}=v; setForm(rest); }}>Edit</button>
+                <button data-testid={`edit-vendor-${v.id}`} onClick={() => { setEditId(v.id); const {id,...rest}=v; setForm(rest); }}>{t('setup.vendors.edit')}</button>
               </td>
             </tr>
           ))}

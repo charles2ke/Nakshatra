@@ -5,11 +5,15 @@
     <Project Path="src/Nakshatra.Catalog.Service/Nakshatra.Catalog.Service.csproj" />
     <Project Path="src/Nakshatra.Fulfillment.Service/Nakshatra.Fulfillment.Service.csproj" />
     <Project Path="src/Nakshatra.Gateway/Nakshatra.Gateway.csproj" />
+    <Project Path="src/Nakshatra.Inventory.Service/Nakshatra.Inventory.Service.csproj" />
+    <Project Path="src/Nakshatra.Media.Service/Nakshatra.Media.Service.csproj" />
+    <Project Path="src/Nakshatra.Notification.Service/Nakshatra.Notification.Service.csproj" />
     <Project Path="src/Nakshatra.Order.Service/Nakshatra.Order.Service.csproj" />
     <Project Path="src/Nakshatra.Payment.Service/Nakshatra.Payment.Service.csproj" />
     <Project Path="src/Nakshatra.Recommendation.Service/Nakshatra.Recommendation.Service.csproj" />
     <Project Path="src/Nakshatra.Search.Service/Nakshatra.Search.Service.csproj" />
     <Project Path="src/Nakshatra.Shared/Nakshatra.Shared.csproj" />
+    <Project Path="src/Nakshatra.SupplyChain.Service/Nakshatra.SupplyChain.Service.csproj" />
     <Project Path="src/Nakshatra.User.Service/Nakshatra.User.Service.csproj" />
     <Project Path="src/Nakshatra.Vendor.Service/Nakshatra.Vendor.Service.csproj" />
   </Folder>
