@@ -1,0 +1,32 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+dist/
+build/
+out/
+
+# Dependencies
+node_modules/
+
+# Test output
+TestResults/
+test-results/
+playwright-report/
+coverage/
+*.trx
+
+# IDE / editor
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Environment
+.env
+.env.local
+*.local
+
+# OS
+.DS_Store
+Thumbs.db
