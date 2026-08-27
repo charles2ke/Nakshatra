@@ -76,3 +76,47 @@ export const getPayment = (id: string) => request<Payment>(`/api/payments/${id}`
 
 export const getInvoices = (userId: string) => request<Invoice[]>(`/api/billing/invoices?userId=${userId}`);
 export const getInvoice = (orderId: string) => request<Invoice>(`/api/billing/invoices/${orderId}`);
+
+export interface InventoryItem { id: string; productId: string; vendorId: string; warehouse: string; onHand: number; reserved: number; onOrder: number; leadTimeDays: number; available: number; updatedAt: string; }
+export interface ForecastPoint { date: string; forecastUnits: number; }
+export interface InventoryForecast {
+  productId: string; horizonDays: number; averageDailyDemand: number; demandStdDev: number; trendPerDay: number;
+  forecastDemand: number; safetyStock: number; reorderPoint: number; economicOrderQuantity: number;
+  recommendedOrderQuantity: number; daysOfCoverRemaining: number; reorderNow: boolean; dailyForecast: ForecastPoint[];
+}
+export const getInventory = (vendorId?: string) =>
+  request<InventoryItem[]>(`/api/inventory${vendorId ? `?vendorId=${encodeURIComponent(vendorId)}` : ''}`);
+export const getInventoryForecast = (productId: string, horizonDays = 30) =>
+  request<InventoryForecast>(`/api/inventory/${productId}/forecast?horizonDays=${horizonDays}`);
+export const getReorderSuggestions = (horizonDays = 30) =>
+  request<InventoryForecast[]>(`/api/inventory/reorder-suggestions?horizonDays=${horizonDays}`);
+export const adjustInventory = (productId: string, delta: number, reason: string) =>
+  request<InventoryItem>(`/api/inventory/${productId}/adjust`, { method: 'POST', body: JSON.stringify({ delta, reason }) });
+export const replenishInventory = (productId: string, quantity: number) =>
+  request<InventoryItem>(`/api/inventory/${productId}/replenish`, { method: 'POST', body: JSON.stringify({ quantity }) });
+
+export type SupplyChainStage =
+  | 'Sourcing' | 'ReplenishmentOrdered' | 'GoodsReceived' | 'OrderPlaced' | 'PaymentSettled'
+  | 'Picked' | 'Packed' | 'HandedToCarrier' | 'InTransit' | 'OutForDelivery' | 'Delivered' | 'Exception';
+export interface SupplyChainEvent { stage: SupplyChainStage; description: string; location: string; actor: string; timestamp: string; }
+export interface SupplyChainTrace { id: string; reference: string; referenceType: string; userId: string; currentStage: SupplyChainStage; events: SupplyChainEvent[]; estimatedDelivery: string | null; updatedAt: string; }
+export const getTrace = (reference: string) => request<SupplyChainTrace>(`/api/supplychain/traces/${reference}`);
+export const getTraces = (params: { userId?: string; referenceType?: string } = {}) => {
+  const qs = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => v !== undefined && qs.set(k, v));
+  const query = qs.toString();
+  return request<SupplyChainTrace[]>(`/api/supplychain/traces${query ? `?${query}` : ''}`);
+};
+
+export type NotificationSeverity = 'Info' | 'Warning' | 'Critical';
+export interface AppNotification { id: string; userId: string; audience: string; title: string; body: string; reference: string; topic: string; channel: string; severity: NotificationSeverity; read: boolean; createdAt: string; }
+export interface NotificationFeed { unreadCount: number; items: AppNotification[]; }
+export const getNotifications = (params: { userId?: string; audience?: string; unreadOnly?: boolean } = {}) => {
+  const qs = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => v !== undefined && qs.set(k, String(v)));
+  const query = qs.toString();
+  return request<NotificationFeed>(`/api/notifications${query ? `?${query}` : ''}`);
+};
+export const markNotificationRead = (id: string) => request<AppNotification>(`/api/notifications/${id}/read`, { method: 'POST' });
+export const markAllNotificationsRead = (body: { userId?: string; audience?: string }) =>
+  request<{ updated: number }>('/api/notifications/read-all', { method: 'POST', body: JSON.stringify(body) });

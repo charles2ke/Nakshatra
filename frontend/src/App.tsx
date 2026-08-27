@@ -9,6 +9,8 @@ import OrdersPage from './pages/OrdersPage';
 import OrderDetailPage from './pages/OrderDetailPage';
 import BillingPage from './pages/BillingPage';
 import FulfillmentPage from './pages/FulfillmentPage';
+import InventoryPage from './pages/InventoryPage';
+import NotificationsPage from './pages/NotificationsPage';
 import SetupProductsPage from './pages/setup/SetupProductsPage';
 import SetupVendorsPage from './pages/setup/SetupVendorsPage';
 import SetupUsersPage from './pages/setup/SetupUsersPage';
@@ -28,6 +30,8 @@ export default function App() {
           <Route path="orders/:id" element={<ProtectedRoute allow={['Customer','Vendor','Admin','FulfillmentAgent']}><OrderDetailPage /></ProtectedRoute>} />
           <Route path="billing" element={<ProtectedRoute allow={['Customer','Vendor','Admin']}><BillingPage /></ProtectedRoute>} />
           <Route path="fulfillment" element={<ProtectedRoute allow={['FulfillmentAgent','Admin']}><FulfillmentPage /></ProtectedRoute>} />
+          <Route path="inventory" element={<ProtectedRoute allow={['Vendor','Admin']}><InventoryPage /></ProtectedRoute>} />
+          <Route path="notifications" element={<ProtectedRoute allow={['Customer','Vendor','Admin','FulfillmentAgent']}><NotificationsPage /></ProtectedRoute>} />
           <Route path="setup/products" element={<ProtectedRoute allow={['Vendor','Admin']}><SetupProductsPage /></ProtectedRoute>} />
           <Route path="setup/vendors" element={<ProtectedRoute allow={['Admin']}><SetupVendorsPage /></ProtectedRoute>} />
           <Route path="setup/users" element={<ProtectedRoute allow={['Admin']}><SetupUsersPage /></ProtectedRoute>} />

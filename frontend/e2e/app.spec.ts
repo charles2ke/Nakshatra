@@ -168,3 +168,63 @@ test('lang switcher dropdown changes locale live', async ({ page }) => {
   await expect(page.locator('[data-testid="home-title"]')).toHaveText('Tienda Nakshatra');
   await page.screenshot({ path: 'e2e/screenshots/locale-switcher-es.png' });
 });
+
+test('inventory page shows stock positions and reorder suggestions', async ({ page }) => {
+  await mockAllApis(page);
+  await injectAdminPersona(page);
+  await page.goto('/inventory');
+  await expect(page.locator('[data-testid="inventory-page"]')).toBeVisible();
+  await expect(page.locator('[data-testid="inventory-table"]')).toBeVisible();
+  await expect(page.locator('[data-testid="inventory-row-p1"]')).toBeVisible();
+  await expect(page.locator('[data-testid="reorder-qty-p2"]')).toHaveText('60');
+  await page.screenshot({ path: ss('inventory-page') });
+});
+
+test('inventory forecast panel opens for a product', async ({ page }) => {
+  await mockAllApis(page);
+  await injectAdminPersona(page);
+  await page.goto('/inventory');
+  await page.click('[data-testid="forecast-p2"]');
+  await expect(page.locator('[data-testid="forecast-panel"]')).toBeVisible();
+  await expect(page.locator('[data-testid="forecast-eoq"]')).toHaveText('55');
+  await page.screenshot({ path: ss('inventory-forecast') });
+});
+
+test('raising a replenishment updates the on-order position', async ({ page }) => {
+  await mockAllApis(page);
+  await injectAdminPersona(page);
+  await page.goto('/inventory');
+  await page.click('[data-testid="replenish-p2"]');
+  await expect(page.locator('[data-testid="on-order-p2"]')).toHaveText('60');
+  await expect(page.locator('[data-testid="inventory-message"]')).toBeVisible();
+  await page.screenshot({ path: ss('inventory-replenish') });
+});
+
+test('notifications page lists the feed and marks one read', async ({ page }) => {
+  await mockAllApis(page);
+  await injectCustomerPersona(page);
+  await page.goto('/notifications');
+  await expect(page.locator('[data-testid="notifications-page"]')).toBeVisible();
+  await expect(page.locator('[data-testid="notifications-unread-count"]')).toContainText('2');
+  await expect(page.locator('[data-testid="notification-n1"]')).toBeVisible();
+  await page.click('[data-testid="notification-read-n1"]');
+  await expect(page.locator('[data-testid="notification-read-n1"]')).toHaveCount(0);
+  await page.screenshot({ path: ss('notifications-page') });
+});
+
+test('order detail shows the supply chain trace', async ({ page }) => {
+  await mockAllApis(page);
+  await injectCustomerPersona(page);
+  await page.goto(`/orders/${ORDER.id}`);
+  await expect(page.locator('[data-testid="supplychain-trace"]')).toBeVisible();
+  await expect(page.locator('[data-testid="trace-current-stage"]')).toHaveText('InTransit');
+  await expect(page.locator('[data-testid="trace-event-3"]')).toBeVisible();
+  await page.screenshot({ path: ss('supplychain-trace') });
+});
+
+test('inventory is restricted for the customer persona', async ({ page }) => {
+  await mockAllApis(page);
+  await injectCustomerPersona(page);
+  await page.goto('/inventory');
+  await expect(page.locator('[data-testid="access-restricted"]')).toBeVisible();
+});

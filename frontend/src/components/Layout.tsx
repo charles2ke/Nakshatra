@@ -13,6 +13,8 @@ const NAV: NavItem[] = [
   { key: 'orders',           labelKey: 'nav.orders',         to: '/orders',         allow: ['Customer','Vendor','Admin','FulfillmentAgent'] },
   { key: 'billing',          labelKey: 'nav.billing',        to: '/billing',        allow: ['Customer','Vendor','Admin'] },
   { key: 'fulfillment',      labelKey: 'nav.fulfillment',    to: '/fulfillment',    allow: ['FulfillmentAgent','Admin'] },
+  { key: 'inventory',        labelKey: 'nav.inventory',      to: '/inventory',      allow: ['Vendor','Admin'] },
+  { key: 'notifications',    labelKey: 'nav.notifications',  to: '/notifications',  allow: ['Customer','Vendor','Admin','FulfillmentAgent'] },
   { key: 'products-setup',   labelKey: 'nav.setup.products', to: '/setup/products', allow: ['Vendor','Admin'] },
   { key: 'vendors-setup',    labelKey: 'nav.setup.vendors',  to: '/setup/vendors',  allow: ['Admin'] },
   { key: 'users-setup',      labelKey: 'nav.setup.users',    to: '/setup/users',    allow: ['Admin'] },

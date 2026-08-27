@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { getOrder, getOrderStatus } from '../api/client';
-import type { Order, OrderStatusResponse } from '../api/client';
+import { getOrder, getOrderStatus, getTrace } from '../api/client';
+import type { Order, OrderStatusResponse, SupplyChainTrace } from '../api/client';
 import { useLocale } from '../i18n/LocaleContext';
 
 export default function OrderDetailPage() {
@@ -9,11 +9,13 @@ export default function OrderDetailPage() {
   const { t, formatCurrency, formatDate } = useLocale();
   const [order, setOrder] = useState<Order | null>(null);
   const [status, setStatus] = useState<OrderStatusResponse | null>(null);
+  const [trace, setTrace] = useState<SupplyChainTrace | null>(null);
 
   useEffect(() => {
     if (!id) return;
     getOrder(id).then(setOrder).catch(() => {});
     getOrderStatus(id).then(setStatus).catch(() => {});
+    getTrace(id).then(setTrace).catch(() => {});
   }, [id]);
 
   if (!order) return <div data-testid="order-loading">{t('orderDetail.loading')}</div>;
@@ -41,6 +43,23 @@ export default function OrderDetailPage() {
               <span className="timeline-status">{h.status}</span>
               <span className="timeline-time">{formatDate(h.timestamp)}</span>
               {h.note && <span className="timeline-note">{h.note}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+      {trace && (
+        <div className="order-timeline" data-testid="supplychain-trace">
+          <h2>{t('trace.title')}</h2>
+          <div data-testid="trace-current-stage" className="status-badge">{trace.currentStage}</div>
+          {trace.estimatedDelivery && (
+            <div data-testid="trace-eta">{t('trace.eta')}: {formatDate(trace.estimatedDelivery)}</div>
+          )}
+          {trace.events.map((e, i) => (
+            <div key={i} className="timeline-item" data-testid={`trace-event-${i}`}>
+              <span className="timeline-status">{e.stage}</span>
+              <span className="timeline-time">{formatDate(e.timestamp)}</span>
+              {e.description && <span className="timeline-note">{e.description}</span>}
+              {e.location && <span className="timeline-note">{e.location}</span>}
             </div>
           ))}
         </div>

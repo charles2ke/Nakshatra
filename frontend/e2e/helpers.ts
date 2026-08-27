@@ -49,6 +49,55 @@ export const INVOICES = [
   { id: 'inv-001', orderId: ORDER.id, userId: 'u1', lines: [{ description: 'Silk Saree', amount: 2999 }], subtotal: 2999, tax: 540, total: 3539, currency: 'INR', issuedAt: '2024-06-01T10:06:00Z', paid: true },
 ];
 
+export const INVENTORY = [
+  { id: 'p1', productId: 'p1', vendorId: 'v1', warehouse: 'main', onHand: 40, reserved: 5, onOrder: 0, leadTimeDays: 7, available: 35, updatedAt: '2024-06-01T10:00:00Z' },
+  { id: 'p2', productId: 'p2', vendorId: 'v1', warehouse: 'main', onHand: 4, reserved: 1, onOrder: 0, leadTimeDays: 10, available: 3, updatedAt: '2024-06-01T10:00:00Z' },
+];
+
+export const FORECAST = {
+  productId: 'p2',
+  horizonDays: 30,
+  averageDailyDemand: 1.4,
+  demandStdDev: 0.6,
+  trendPerDay: 0.02,
+  forecastDemand: 42,
+  safetyStock: 6,
+  reorderPoint: 20,
+  economicOrderQuantity: 55,
+  recommendedOrderQuantity: 60,
+  daysOfCoverRemaining: 2,
+  reorderNow: true,
+  dailyForecast: [
+    { date: '2024-06-02', forecastUnits: 1.4 },
+    { date: '2024-06-03', forecastUnits: 1.42 },
+  ],
+};
+
+export const TRACE = {
+  id: ORDER.id,
+  reference: ORDER.id,
+  referenceType: 'order',
+  userId: 'u1',
+  currentStage: 'InTransit',
+  events: [
+    { stage: 'OrderPlaced', description: 'Order placed', location: 'Mumbai', actor: 'portal', timestamp: '2024-06-01T10:00:00Z' },
+    { stage: 'PaymentSettled', description: 'Payment captured', location: '', actor: 'payment-service', timestamp: '2024-06-01T10:05:00Z' },
+    { stage: 'Packed', description: 'Packed at warehouse', location: 'Pune DC', actor: 'fulfillment', timestamp: '2024-06-02T09:00:00Z' },
+    { stage: 'InTransit', description: 'In transit with BlueDart', location: 'Nashik hub', actor: 'carrier', timestamp: '2024-06-03T08:00:00Z' },
+  ],
+  estimatedDelivery: '2024-06-05T00:00:00Z',
+  updatedAt: '2024-06-03T08:00:00Z',
+};
+
+export const NOTIFICATIONS = {
+  unreadCount: 2,
+  items: [
+    { id: 'n1', userId: 'u1', audience: '', title: 'Order shipped', body: 'Your order is on the way.', reference: ORDER.id, topic: 'order.status', channel: 'InApp', severity: 'Info', read: false, createdAt: '2024-06-03T08:00:00Z' },
+    { id: 'n2', userId: '', audience: 'Vendor', title: 'Low stock', body: 'Gold Necklace is below its reorder point.', reference: 'p2', topic: 'inventory.low', channel: 'InApp', severity: 'Warning', read: false, createdAt: '2024-06-02T08:00:00Z' },
+    { id: 'n3', userId: 'u1', audience: '', title: 'Invoice issued', body: 'Invoice inv-001 is available.', reference: 'inv-001', topic: 'billing.invoice', channel: 'InApp', severity: 'Info', read: true, createdAt: '2024-06-01T10:06:00Z' },
+  ],
+};
+
 // Playwright routes: LAST registered wins. Register generic first, specific last.
 export async function mockAllApis(page: Page) {
   // Users
@@ -102,6 +151,21 @@ export async function mockAllApis(page: Page) {
   // Billing
   await page.route('**/api/billing/invoices**', route => route.fulfill({ json: INVOICES }));
   await page.route('**/api/billing/invoices/**', route => route.fulfill({ json: INVOICES[0] }));
+
+  // Inventory - generic first, specific last
+  await page.route('**/api/inventory**', route => route.fulfill({ json: INVENTORY }));
+  await page.route('**/api/inventory/reorder-suggestions**', route => route.fulfill({ json: [FORECAST] }));
+  await page.route('**/api/inventory/*/forecast**', route => route.fulfill({ json: FORECAST }));
+  await page.route('**/api/inventory/*/adjust', route => route.fulfill({ json: { ...INVENTORY[1], onHand: INVENTORY[1].onHand + 10, available: INVENTORY[1].available + 10 } }));
+  await page.route('**/api/inventory/*/replenish', route => route.fulfill({ json: { ...INVENTORY[1], onOrder: 60 } }));
+
+  // Supply chain
+  await page.route('**/api/supplychain/traces**', route => route.fulfill({ json: TRACE }));
+
+  // Notifications - generic first, specific last
+  await page.route('**/api/notifications**', route => route.fulfill({ json: NOTIFICATIONS }));
+  await page.route('**/api/notifications/read-all', route => route.fulfill({ json: { updated: 2 } }));
+  await page.route('**/api/notifications/*/read', route => route.fulfill({ json: { ...NOTIFICATIONS.items[0], read: true } }));
 }
 
 /** Call BEFORE page.goto() — injects localStorage before page scripts run */
