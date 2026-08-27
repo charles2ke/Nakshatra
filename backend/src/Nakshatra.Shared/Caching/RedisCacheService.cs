@@ -25,7 +25,7 @@ public class RedisCacheService : ICacheService
         }
         catch (RedisException ex)
         {
-            _logger.LogWarning(ex, "Redis GET failed for {Key}; falling through to source of truth.", key);
+            _logger.LogWarning(ex, "Redis GET failed for {Key}; falling through to source of truth.", LogSanitizer.Sanitize(key));
             return default;
         }
     }
@@ -38,7 +38,7 @@ public class RedisCacheService : ICacheService
         }
         catch (RedisException ex)
         {
-            _logger.LogWarning(ex, "Redis SET failed for {Key}.", key);
+            _logger.LogWarning(ex, "Redis SET failed for {Key}.", LogSanitizer.Sanitize(key));
         }
     }
 
@@ -50,7 +50,7 @@ public class RedisCacheService : ICacheService
         }
         catch (RedisException ex)
         {
-            _logger.LogWarning(ex, "Redis DEL failed for {Key}.", key);
+            _logger.LogWarning(ex, "Redis DEL failed for {Key}.", LogSanitizer.Sanitize(key));
         }
     }
 

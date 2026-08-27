@@ -69,7 +69,7 @@ public class InMemoryEventBus : IEventPublisher, IEventSubscriber
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Handler for topic {Topic} failed.", envelope.Topic);
+                _logger.LogError(ex, "Handler for topic {Topic} failed.", LogSanitizer.Sanitize(envelope.Topic));
             }
         }
     }
