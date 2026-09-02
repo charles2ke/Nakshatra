@@ -113,8 +113,8 @@ Ingress. Replace the placeholder Secret with a real secret store before any non-
 Every push to `main` builds the portal and publishes it to
 https://charles2ke.github.io/Nakshatra/.
 
-- The workflow runs `actions/configure-pages` with `enablement: true`, which sets the Pages
-  source to GitHub Actions. Otherwise the legacy branch-based build publishes a rendered
+- In repository **Settings → Pages**, set **Build and deployment → Source** to
+  **GitHub Actions**. Otherwise the legacy branch-based build publishes a rendered
   `README.md` instead of the portal.
 - `BASE_PATH` sets the Vite base so assets and routes resolve under `/Nakshatra/`.
 - `index.html` is copied to `404.html` so client-side routes survive a reload.
