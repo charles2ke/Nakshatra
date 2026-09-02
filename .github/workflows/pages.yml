@@ -25,11 +25,7 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
-      # Switches the Pages source to this workflow, so the site serves the
-      # built portal rather than a Jekyll render of README.md.
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
       - uses: actions/setup-node@v4
         with:
           node-version: 22
