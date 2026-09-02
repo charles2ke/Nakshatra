@@ -1,11 +1,11 @@
 name: Deploy portal to GitHub Pages
 
 on:
+  # Every push to main redeploys the portal. Without this the legacy
+  # "pages build and deployment" job could publish the repository README
+  # instead of the built site.
   push:
     branches: [main]
-    paths:
-      - 'frontend/**'
-      - '.github/workflows/pages.yml'
   workflow_dispatch:
 
 permissions:
@@ -25,6 +25,11 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
+      # Switches the Pages source to this workflow, so the site serves the
+      # built portal rather than a Jekyll render of README.md.
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - uses: actions/setup-node@v4
         with:
           node-version: 22
