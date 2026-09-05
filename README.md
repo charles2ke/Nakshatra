@@ -113,9 +113,9 @@ Ingress. Replace the placeholder Secret with a real secret store before any non-
 Every push to `main` builds the portal and publishes it to
 https://charles2ke.github.io/Nakshatra/.
 
-- In repository **Settings → Pages**, set **Build and deployment → Source** to
-  **GitHub Actions**. Otherwise the legacy branch-based build publishes a rendered
-  `README.md` instead of the portal.
+- The workflow sets **Settings → Pages → Source** to **GitHub Actions** on every run, so the
+  legacy branch-based build can no longer publish a rendered `README.md` instead of the portal.
+  If that API call is not permitted, the run logs a warning and the source must be set manually.
 - `BASE_PATH` sets the Vite base so assets and routes resolve under `/Nakshatra/`.
 - `index.html` is copied to `404.html` so client-side routes survive a reload.
 - Set the `VITE_API_BASE_URL` repository variable to point the published portal at a
