@@ -25,6 +25,17 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
+      # Switch the Pages source to GitHub Actions. While the repository is on
+      # the legacy branch-based source, Pages publishes a Jekyll-rendered
+      # README.md instead of the portal built below.
+      - name: Use this workflow as the Pages source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh api -X POST "repos/$REPO/pages" -f build_type=workflow ||
+            gh api -X PUT "repos/$REPO/pages" -f build_type=workflow ||
+            echo "::warning::Could not set the Pages source to GitHub Actions; set Settings -> Pages -> Source to 'GitHub Actions' manually."
       - uses: actions/configure-pages@v5
       - uses: actions/setup-node@v4
         with:
