@@ -97,6 +97,27 @@ Every service reads configuration from `appsettings.json` and environment variab
 | `Cors__AllowedOrigins__N` | Origins allowed to call the API |
 | `RateLimit__PermitsPerMinute` | Per-IP, per-replica request limit (default 600) |
 | `ReverseProxy__Clusters__*` | Gateway routing targets |
+| `Payments__Provider`, `Payments__Stripe__SecretKey` | Stripe integration; omitted ⇒ simulated gateway |
+| `Notifications__Smtp__*` | SMTP email delivery; omitted ⇒ in-app feed only |
+| `Notifications__Twilio__*` | Twilio SMS delivery; omitted ⇒ in-app feed only |
+| `Notifications__Webhook__Url`, `__Token` | Outbound webhook delivery; omitted ⇒ in-app feed only |
+
+## External integrations
+
+Third-party providers sit behind interfaces and are enabled by configuration, so the stack still
+runs end to end without any external accounts:
+
+| Integration | Service | Enable with | Without it |
+|-------------|---------|-------------|------------|
+| Stripe (PaymentIntents, refunds) | Payment | `PAYMENTS_PROVIDER=stripe STRIPE_SECRET_KEY=sk_... docker compose up` | Simulated card gateway |
+| SMTP email | Notification | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM_ADDRESS` | Notification stays in the in-app feed |
+| Twilio SMS | Notification | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` | Notification stays in the in-app feed |
+| Outbound webhook | Notification | `NOTIFICATIONS_WEBHOOK_URL`, `NOTIFICATIONS_WEBHOOK_TOKEN` | Notification stays in the in-app feed |
+
+With Stripe enabled the portal must tokenize the card with Stripe.js and send the resulting token
+as `paymentMethodToken`; requests that still contain a card number are rejected so raw card data
+never reaches the backend. See [`docs/architecture.md`](docs/architecture.md) for the full
+integration design.
 
 ## Deploying to Kubernetes
 

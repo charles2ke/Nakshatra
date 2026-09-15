@@ -13,7 +13,8 @@ communicate synchronously over HTTP for reads and asynchronously over Kafka for 
 - [7. Data design](#7-data-design)
 - [8. Cross-cutting concerns](#8-cross-cutting-concerns)
 - [9. Deployment topology](#9-deployment-topology)
-- [10. Design decisions and trade-offs](#10-design-decisions-and-trade-offs)
+- [10. External integrations](#10-external-integrations)
+- [11. Design decisions and trade-offs](#11-design-decisions-and-trade-offs)
 
 ---
 
@@ -46,7 +47,8 @@ flowchart LR
     Redis[(Redis<br/>cache)]
     Kafka[(Kafka<br/>event log)]
     Files[(Media volume<br/>originals + renditions)]
-    PSP[[Payment gateway<br/>simulated]]
+    PSP[[Stripe<br/>payments]]
+    Comms[[SMTP / Twilio / webhooks<br/>notification delivery]]
 
     Customer --> Portal
     Vendor --> Portal
@@ -146,13 +148,13 @@ Ports shown are the local development ports (`launchSettings.json`, and the gate
 | **Cart** | Per-user cart lines | `/api/cart/{userId}` and item add/update/remove | `cart.item-added` | — |
 | **Recommendation** | Co-purchase graph, "also purchased", basket recommendations | `/api/recommendations/also-purchased/{productId}`, `/api/recommendations/basket` | — | `orders.created` |
 | **Order** | Order creation, pricing (subtotal + tax), status transitions, cancellation | `/api/orders`, `/api/orders/{id}/status`, `/api/orders/{id}/cancel` | `orders.created`, `orders.status-changed` | `payments.completed` |
-| **Payment** | Authorization and refunds through a simulated payment gateway | `/api/payments`, `/api/payments/{id}/refund` | `payments.completed` | — |
+| **Payment** | Authorization and refunds through Stripe, or a simulated gateway when no provider is configured | `/api/payments`, `/api/payments/{id}/refund` | `payments.completed` | — |
 | **Billing** | Invoices derived from orders and payments | `/api/billing/invoices` | — | `orders.created`, `payments.completed` |
 | **Fulfillment** | Shipments and their stage transitions | `/api/fulfillment/shipments`, `.../advance` | — | `orders.created` |
 | **Inventory** | Stock levels, adjustments, replenishment, demand forecasting, reorder suggestions | `/api/inventory`, `.../adjust`, `.../replenish`, `.../forecast`, `/api/inventory/reorder-suggestions` | `inventory.adjusted`, `inventory.low`, `inventory.replenishment-ordered` | `orders.created` |
 | **SupplyChain** | End-to-end traceability of orders and replenishments | `/api/supplychain/traces`, `/api/supplychain/stages` | `supplychain.event-recorded` | `orders.created`, `orders.status-changed`, `inventory.replenishment-ordered` |
 | **Media** | Uploads, sandboxed storage, background transcoding into renditions | `/api/media`, `/api/media/{id}/renditions/{rendition}` | `media.uploaded`, `media.transcoded` | `media.uploaded` |
-| **Notification** | Per-user notification inbox fed by domain events | `/api/notifications`, `.../read`, `.../read-all` | — | `orders.created`, `orders.status-changed`, `payments.completed`, `supplychain.event-recorded`, `inventory.low`, `inventory.replenishment-ordered`, `media.transcoded` |
+| **Notification** | Per-user notification inbox fed by domain events, delivered over email/SMS/webhooks | `/api/notifications`, `.../read`, `.../read-all` | — | `orders.created`, `orders.status-changed`, `payments.completed`, `supplychain.event-recorded`, `inventory.low`, `inventory.replenishment-ordered`, `media.transcoded` |
 
 ## 5. Event-driven design
 
@@ -339,7 +341,33 @@ flowchart TB
 - **Images**: one parameterized `backend/Dockerfile` (`SERVICE` and `INSTALL_FFMPEG` build args)
   for every .NET service; `frontend.Dockerfile` builds the portal and serves it from nginx.
 
-## 10. Design decisions and trade-offs
+## 10. External integrations
+
+Every third-party integration sits behind an interface and is selected by configuration. When the
+credentials are absent the service falls back to its in-process behaviour, so development, CI and
+the published demo run without any external accounts.
+
+| Integration | Service | Configuration | Fallback when unconfigured |
+|-------------|---------|---------------|-----------------------------|
+| Stripe PaymentIntents + Refunds | Payment | `Payments__Provider=stripe`, `Payments__Stripe__SecretKey` | Simulated gateway (Luhn/expiry/CVV validation) |
+| SMTP email (SendGrid, SES, Mailgun, corporate relay) | Notification | `Notifications__Smtp__Host`, `__Port`, `__UseSsl`, `__Username`, `__Password`, `__FromAddress`, `__FromName` | In-app feed only, delivery logged |
+| Twilio Programmable Messaging (SMS) | Notification | `Notifications__Twilio__AccountSid`, `__AuthToken`, `__FromNumber` | In-app feed only, delivery logged |
+| Outbound webhooks (Slack, Teams, partner systems) | Notification | `Notifications__Webhook__Url`, `__Token` | In-app feed only, delivery logged |
+
+- Card data never reaches the payment service when Stripe is enabled: the portal tokenizes the
+  instrument with Stripe.js and sends only the resulting payment method token, and requests that
+  still carry a PAN are rejected. The returned PaymentIntent id is stored on the payment as
+  `providerReference` and used for refunds and reconciliation.
+- The notification service resolves recipient contact details from the user service
+  (`Services__User`); a notification whose recipient has no email or phone number stays in the
+  in-app feed.
+- Provider errors never lose data: the notification is persisted before delivery is attempted, and
+  a failed delivery falls back to the logging dispatcher.
+- Secrets come from environment variables — the Kubernetes Secret in
+  `infra/k8s/00-namespace-and-config.yaml` holds placeholders that must be replaced by a real
+  secret store.
+
+## 11. Design decisions and trade-offs
 
 | Decision | Rationale | Trade-off |
 |----------|-----------|-----------|
@@ -350,3 +378,4 @@ flowchart TB
 | In-memory fallbacks for Mongo/Redis/Kafka | Fast local development and cheap integration tests without infrastructure | Fallback behaviour is single-process only and must never be used in production |
 | Minimal APIs plus a shared `ServiceDefaults` | Little boilerplate and consistent cross-cutting behaviour across 15 processes | The shared library is a coupling point that must stay thin and stable |
 | Filesystem media storage with sandboxed paths | Keeps the stack runnable anywhere | Object storage would be required for multi-replica production media |
+| Third-party integrations behind interfaces, enabled by configuration | Stripe, SMTP, Twilio and webhook receivers can be swapped or disabled per environment, and tests need no credentials | A provider that is misconfigured silently falls back, so configuration must be verified per environment |
