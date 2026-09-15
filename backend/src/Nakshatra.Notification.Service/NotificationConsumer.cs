@@ -150,12 +150,14 @@ public class NotificationConsumer : BackgroundService
 /// <summary>Delivers a notification over its channel.</summary>
 public interface INotificationDispatcher
 {
-    Task DispatchAsync(Notification notification, CancellationToken ct = default);
+    /// <summary>Returns <c>true</c> when the notification was accepted by the delivery provider.</summary>
+    Task<bool> DispatchAsync(Notification notification, CancellationToken ct = default);
 }
 
 /// <summary>
-/// Default dispatcher. Email/SMS providers are not wired up in this repository, so delivery is
-/// logged without any personal data and the notification stays available in the in-app feed.
+/// Fallback dispatcher used when no provider is configured for the channel, or when the provider
+/// could not deliver. Delivery is logged without any personal data and the notification stays
+/// available in the in-app feed.
 /// </summary>
 public class LoggingNotificationDispatcher : INotificationDispatcher
 {
@@ -163,11 +165,11 @@ public class LoggingNotificationDispatcher : INotificationDispatcher
 
     public LoggingNotificationDispatcher(ILogger<LoggingNotificationDispatcher> logger) => _logger = logger;
 
-    public Task DispatchAsync(Notification notification, CancellationToken ct = default)
+    public Task<bool> DispatchAsync(Notification notification, CancellationToken ct = default)
     {
         _logger.LogInformation(
             "Dispatched {Channel} notification {NotificationId} for topic {Topic} (reference {Reference}).",
             notification.Channel, notification.Id, notification.Topic, notification.Reference);
-        return Task.CompletedTask;
+        return Task.FromResult(true);
     }
 }

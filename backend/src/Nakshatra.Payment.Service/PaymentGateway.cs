@@ -11,9 +11,10 @@ public record PaymentRequest(
     string? CardNumber,
     string? CardHolder,
     string? Expiry,
-    string? Cvv);
+    string? Cvv,
+    string? PaymentMethodToken = null);
 
-public record GatewayResult(bool Approved, string MaskedInstrument, string FailureReason);
+public record GatewayResult(bool Approved, string MaskedInstrument, string FailureReason, string ProviderReference = "");
 
 /// <summary>
 /// Simulated payment gateway. Validates the instrument and approves the charge, except for the

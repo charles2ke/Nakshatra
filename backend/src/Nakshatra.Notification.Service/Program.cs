@@ -4,7 +4,7 @@ using Nakshatra.Shared.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddNakshatraInfrastructure(builder.Configuration);
-builder.Services.AddSingleton<INotificationDispatcher, LoggingNotificationDispatcher>();
+builder.Services.AddNotificationDispatchers(builder.Configuration);
 builder.Services.AddHostedService<NotificationConsumer>();
 
 var app = builder.Build();

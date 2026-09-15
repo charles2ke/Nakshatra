@@ -6,6 +6,7 @@ using Nakshatra.Shared.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddNakshatraInfrastructure(builder.Configuration);
+builder.Services.AddPaymentProvider(builder.Configuration);
 
 var app = builder.Build();
 app.UseNakshatraDefaults("payment-service");
@@ -16,6 +17,7 @@ app.MapPost("/api/payments", async (
     PaymentRequest request,
     IDocumentRepository<Payment> repo,
     IEventPublisher publisher,
+    IPaymentProvider provider,
     CancellationToken ct) =>
 {
     if (string.IsNullOrWhiteSpace(request.OrderId))
@@ -28,7 +30,7 @@ app.MapPost("/api/payments", async (
         return Results.BadRequest(new { error = $"Unsupported payment method '{request.Method}'." });
     }
 
-    var result = PaymentGateway.Authorize(request, method);
+    var result = await provider.AuthorizeAsync(request, method, ct);
     var payment = new Payment
     {
         OrderId = request.OrderId,
@@ -38,7 +40,9 @@ app.MapPost("/api/payments", async (
         Method = method,
         MaskedInstrument = result.MaskedInstrument,
         Status = result.Approved ? PaymentStatus.Captured : PaymentStatus.Failed,
-        FailureReason = result.FailureReason
+        FailureReason = result.FailureReason,
+        Provider = provider.Name,
+        ProviderReference = result.ProviderReference
     };
 
     await repo.UpsertAsync(payment, ct);
@@ -59,6 +63,7 @@ app.MapPost("/api/payments/{id}/refund", async (
     string id,
     IDocumentRepository<Payment> repo,
     IEventPublisher publisher,
+    IPaymentProvider provider,
     CancellationToken ct) =>
 {
     var payment = await repo.GetAsync(id, ct);
@@ -70,6 +75,12 @@ app.MapPost("/api/payments/{id}/refund", async (
     if (payment.Status != PaymentStatus.Captured)
     {
         return Results.Conflict(new { error = "Only captured payments can be refunded." });
+    }
+
+    var refund = await provider.RefundAsync(payment, ct);
+    if (!refund.Succeeded)
+    {
+        return Results.BadRequest(new { error = refund.FailureReason });
     }
 
     payment.Status = PaymentStatus.Refunded;
