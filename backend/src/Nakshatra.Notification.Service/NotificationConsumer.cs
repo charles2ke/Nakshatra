@@ -168,8 +168,8 @@ public class LoggingNotificationDispatcher : INotificationDispatcher
     public Task<bool> DispatchAsync(Notification notification, CancellationToken ct = default)
     {
         _logger.LogInformation(
-            "Dispatched {Channel} notification {NotificationId} for topic {Topic} (reference {Reference}).",
-            notification.Channel, notification.Id, notification.Topic, notification.Reference);
+            "Dispatched notification {NotificationId} for topic {Topic} (reference {Reference}).",
+            notification.Id, notification.Topic, notification.Reference);
         return Task.FromResult(true);
     }
 }
