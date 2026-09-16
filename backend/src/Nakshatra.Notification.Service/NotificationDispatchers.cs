@@ -88,26 +88,26 @@ public class SmtpEmailDispatcher : INotificationDispatcher
             return false;
         }
 
-        using var message = new MailMessage
-        {
-            From = new MailAddress(_options.FromAddress, _options.FromName),
-            Subject = notification.Title,
-            Body = notification.Body
-        };
-        message.To.Add(new MailAddress(recipient.Email, recipient.Name));
-
-        using var client = new SmtpClient(_options.Host, _options.Port) { EnableSsl = _options.UseSsl };
-        if (!string.IsNullOrWhiteSpace(_options.Username))
-        {
-            client.Credentials = new NetworkCredential(_options.Username, _options.Password);
-        }
-
         try
         {
+            using var message = new MailMessage
+            {
+                From = new MailAddress(_options.FromAddress, _options.FromName),
+                Subject = notification.Title,
+                Body = notification.Body
+            };
+            message.To.Add(new MailAddress(recipient.Email, recipient.Name));
+
+            using var client = new SmtpClient(_options.Host, _options.Port) { EnableSsl = _options.UseSsl };
+            if (!string.IsNullOrWhiteSpace(_options.Username))
+            {
+                client.Credentials = new NetworkCredential(_options.Username, _options.Password);
+            }
+
             await client.SendMailAsync(message, ct);
             return true;
         }
-        catch (Exception ex) when (ex is SmtpException or InvalidOperationException or TaskCanceledException)
+        catch (Exception ex) when (ex is SmtpException or InvalidOperationException or TaskCanceledException or FormatException or ArgumentException)
         {
             _logger.LogError(ex, "SMTP delivery failed for notification {NotificationId}.", LogSanitizer.Sanitize(notification.Id));
             return false;

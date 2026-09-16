@@ -68,6 +68,41 @@ public class PaymentProviderTests
         Assert.Contains("amount=2550", handler.LastContent, StringComparison.Ordinal);
         Assert.Contains("currency=usd", handler.LastContent, StringComparison.Ordinal);
         Assert.Contains("payment_method=pm_card_visa", handler.LastContent, StringComparison.Ordinal);
+        Assert.True(handler.LastRequest.Headers.TryGetValues("Idempotency-Key", out var keys));
+        Assert.NotEmpty(keys!.Single());
+    }
+
+    [Fact]
+    public async Task Stripe_reuses_the_idempotency_key_for_an_identical_retry()
+    {
+        var (provider, handler) = CreateStripe(
+            HttpStatusCode.OK,
+            """{"id":"pi_123","status":"succeeded"}""");
+        var request = new PaymentRequest("order-1", "user-1", 25.50m, "USD", "Card", null, null, null, null, "pm_card_visa");
+
+        await provider.AuthorizeAsync(request, PaymentMethod.Card);
+        var firstKey = handler.LastRequest!.Headers.GetValues("Idempotency-Key").Single();
+
+        await provider.AuthorizeAsync(request, PaymentMethod.Card);
+        var secondKey = handler.LastRequest!.Headers.GetValues("Idempotency-Key").Single();
+
+        Assert.Equal(firstKey, secondKey);
+    }
+
+    [Fact]
+    public async Task Stripe_uses_a_different_idempotency_key_for_a_different_instrument()
+    {
+        var (provider, handler) = CreateStripe(
+            HttpStatusCode.OK,
+            """{"id":"pi_123","status":"succeeded"}""");
+
+        await provider.AuthorizeAsync(new PaymentRequest("order-1", "user-1", 25.50m, "USD", "Card", null, null, null, null, "pm_card_visa"), PaymentMethod.Card);
+        var firstKey = handler.LastRequest!.Headers.GetValues("Idempotency-Key").Single();
+
+        await provider.AuthorizeAsync(new PaymentRequest("order-1", "user-1", 25.50m, "USD", "Card", null, null, null, null, "pm_card_other"), PaymentMethod.Card);
+        var secondKey = handler.LastRequest!.Headers.GetValues("Idempotency-Key").Single();
+
+        Assert.NotEqual(firstKey, secondKey);
     }
 
     [Fact]
@@ -129,6 +164,19 @@ public class PaymentProviderTests
 
         Assert.False(result.Succeeded);
         Assert.Null(handler.LastRequest);
+    }
+
+    [Theory]
+    [InlineData("pending")]
+    [InlineData("failed")]
+    [InlineData("canceled")]
+    public async Task Stripe_refund_does_not_succeed_unless_stripe_confirms_it(string status)
+    {
+        var (provider, _) = CreateStripe(HttpStatusCode.OK, $$"""{"id":"re_1","status":"{{status}}"}""");
+
+        var result = await provider.RefundAsync(new PaymentEntity { ProviderReference = "pi_123" });
+
+        Assert.False(result.Succeeded);
     }
 
     [Theory]

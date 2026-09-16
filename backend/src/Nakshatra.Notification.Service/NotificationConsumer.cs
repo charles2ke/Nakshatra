@@ -43,7 +43,7 @@ public static class NotificationComposer
                     : $"Your payment for order {envelope.Key} did not go through.",
                 Reference = envelope.Key,
                 Topic = envelope.Topic,
-                Channel = NotificationChannel.Email,
+                Channel = GetString(root, "status") == "Captured" ? NotificationChannel.Email : NotificationChannel.Sms,
                 Severity = GetString(root, "status") == "Captured" ? NotificationSeverity.Info : NotificationSeverity.Warning
             },
             Topics.SupplyChainEventRecorded => new Notification
@@ -61,6 +61,7 @@ public static class NotificationComposer
                 Body = $"Product {envelope.Key} is below its reorder point. Suggested order: {GetNumber(root, "recommendedOrderQuantity")} unit(s).",
                 Reference = envelope.Key,
                 Topic = envelope.Topic,
+                Channel = NotificationChannel.Webhook,
                 Severity = NotificationSeverity.Warning
             },
             Topics.InventoryReplenishmentOrdered => new Notification

@@ -77,6 +77,14 @@ app.MapPost("/api/payments/{id}/refund", async (
         return Results.Conflict(new { error = "Only captured payments can be refunded." });
     }
 
+    if (!string.IsNullOrWhiteSpace(payment.Provider) && !string.Equals(payment.Provider, provider.Name, StringComparison.OrdinalIgnoreCase))
+    {
+        return Results.BadRequest(new
+        {
+            error = $"This payment was processed by '{payment.Provider}', but the '{provider.Name}' provider is currently configured. Configure the original provider to process this refund."
+        });
+    }
+
     var refund = await provider.RefundAsync(payment, ct);
     if (!refund.Succeeded)
     {

@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Nakshatra.Shared;
 using Nakshatra.Shared.Models;
@@ -92,10 +94,13 @@ public class StripePaymentProvider : IPaymentProvider
 
         try
         {
-            using var response = await _httpClient.PostAsync(
-                "/v1/payment_intents",
-                new FormUrlEncodedContent(form),
-                ct);
+            using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "/v1/payment_intents")
+            {
+                Content = new FormUrlEncodedContent(form)
+            };
+            httpRequest.Headers.Add("Idempotency-Key", ComputeIdempotencyKey(request));
+
+            using var response = await _httpClient.SendAsync(httpRequest, ct);
             var body = await response.Content.ReadAsStringAsync(ct);
             using var document = JsonDocument.Parse(body);
             var root = document.RootElement;
@@ -138,15 +143,43 @@ public class StripePaymentProvider : IPaymentProvider
             var body = await response.Content.ReadAsStringAsync(ct);
             using var document = JsonDocument.Parse(body);
 
-            return response.IsSuccessStatusCode
-                ? new RefundResult(true, string.Empty)
-                : new RefundResult(false, ReadError(document.RootElement));
+            if (!response.IsSuccessStatusCode)
+            {
+                return new RefundResult(false, ReadError(document.RootElement));
+            }
+
+            var status = document.RootElement.TryGetProperty("status", out var statusValue) ? statusValue.GetString() : null;
+            return status switch
+            {
+                "succeeded" => new RefundResult(true, string.Empty),
+                "pending" => new RefundResult(false, "The refund is pending and has not completed yet."),
+                "failed" => new RefundResult(false, "The refund failed."),
+                "canceled" => new RefundResult(false, "The refund was canceled."),
+                _ => new RefundResult(false, $"Stripe returned refund status '{status}'.")
+            };
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
         {
             _logger.LogError(ex, "Stripe refund failed for payment {PaymentId}.", LogSanitizer.Sanitize(payment.Id));
             return new RefundResult(false, "The payment provider is unavailable. Please try again.");
         }
+    }
+
+    /// <summary>
+    /// Derives a stable idempotency key from the attempt's identifying parameters, so a network
+    /// retry of the exact same charge reuses the same key (Stripe returns the original result
+    /// instead of creating a second PaymentIntent) while a genuinely new attempt - a different
+    /// amount or instrument - gets its own key.
+    /// </summary>
+    private static string ComputeIdempotencyKey(PaymentRequest request)
+    {
+        var payload = string.Join(
+            '|',
+            request.OrderId,
+            request.Amount.ToString(CultureInfo.InvariantCulture),
+            request.Currency ?? string.Empty,
+            request.PaymentMethodToken ?? string.Empty);
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payload))).ToLowerInvariant();
     }
 
     /// <summary>Currencies without a minor unit (for example JPY) are sent as whole units.</summary>

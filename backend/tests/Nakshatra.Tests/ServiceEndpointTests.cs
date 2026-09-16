@@ -1,8 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
 using Nakshatra.Shared;
 using Nakshatra.Shared.Models;
+using Nakshatra.Shared.Storage;
 
 namespace Nakshatra.Tests;
 
@@ -149,6 +151,35 @@ public class ServiceEndpointTests
         });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Payments_refund_rejects_a_provider_mismatch()
+    {
+        using var factory = new WebApplicationFactory<Nakshatra.Payment.Service.ServiceMarker>();
+        using var client = factory.CreateClient();
+
+        var created = await client.PostAsJsonAsync("/api/payments", new
+        {
+            orderId = "order-mismatch",
+            userId = "user-customer",
+            amount = 10m,
+            currency = "USD",
+            method = "Card",
+            cardNumber = "4242424242424242",
+            cardHolder = "Asha Customer",
+            expiry = "12/34",
+            cvv = "123"
+        });
+        var payment = await created.Content.ReadFromJsonAsync<Nakshatra.Shared.Models.Payment>(ServiceDefaults.JsonOptions);
+
+        payment!.Provider = "stripe";
+        var repo = factory.Services.GetRequiredService<IDocumentRepository<Nakshatra.Shared.Models.Payment>>();
+        await repo.UpsertAsync(payment);
+
+        var refundResponse = await client.PostAsync($"/api/payments/{payment.Id}/refund", null);
+
+        Assert.Equal(HttpStatusCode.BadRequest, refundResponse.StatusCode);
     }
 
     [Fact]
