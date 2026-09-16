@@ -97,6 +97,18 @@ public class PaymentProviderTests
     }
 
     [Fact]
+    public async Task Stripe_rejects_a_raw_card_number_even_when_a_token_is_present()
+    {
+        var (provider, handler) = CreateStripe(HttpStatusCode.OK, "{}");
+        var request = new PaymentRequest("order-1", "user-1", 25m, "USD", "Card", "4242424242424242", "Asha", "12/34", "123", "pm_card_visa");
+
+        var result = await provider.AuthorizeAsync(request, PaymentMethod.Card);
+
+        Assert.False(result.Approved);
+        Assert.Null(handler.LastRequest);
+    }
+
+    [Fact]
     public async Task Stripe_refunds_against_the_stored_payment_intent()
     {
         var (provider, handler) = CreateStripe(HttpStatusCode.OK, """{"id":"re_1","status":"succeeded"}""");

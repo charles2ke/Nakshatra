@@ -73,6 +73,11 @@ public class StripePaymentProvider : IPaymentProvider
             return new GatewayResult(false, string.Empty, "A payment method token from Stripe.js is required.");
         }
 
+        if (!string.IsNullOrWhiteSpace(request.CardNumber))
+        {
+            return new GatewayResult(false, string.Empty, "Raw card numbers are not accepted; submit a Stripe.js payment method token instead.");
+        }
+
         var currency = (string.IsNullOrWhiteSpace(request.Currency) ? "USD" : request.Currency).ToLowerInvariant();
         var form = new Dictionary<string, string>
         {
