@@ -34,8 +34,8 @@ public static class NotificationComposer
                 Reference = envelope.Key,
                 Topic = envelope.Topic
             },
-            // Payment issues are urgent and time-sensitive, so they go out over SMS instead of email; see
-            // ComposePaymentNotification.
+            // Captured payments are confirmed over email; failures are urgent and time-sensitive, so
+            // ComposePaymentNotification escalates them to SMS instead.
             Topics.PaymentsCompleted => ComposePaymentNotification(root, envelope),
             Topics.SupplyChainEventRecorded => new Notification
             {
