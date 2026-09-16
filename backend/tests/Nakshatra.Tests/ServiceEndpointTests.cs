@@ -183,6 +183,59 @@ public class ServiceEndpointTests
     }
 
     [Fact]
+    public async Task Payments_refund_succeeds_when_the_provider_matches()
+    {
+        using var client = CreateClient<Nakshatra.Payment.Service.ServiceMarker>();
+
+        var created = await client.PostAsJsonAsync("/api/payments", new
+        {
+            orderId = "order-matching-provider",
+            userId = "user-customer",
+            amount = 10m,
+            currency = "USD",
+            method = "Card",
+            cardNumber = "4242424242424242",
+            cardHolder = "Asha Customer",
+            expiry = "12/34",
+            cvv = "123"
+        });
+        var payment = await created.Content.ReadFromJsonAsync<Nakshatra.Shared.Models.Payment>(ServiceDefaults.JsonOptions);
+
+        var refundResponse = await client.PostAsync($"/api/payments/{payment!.Id}/refund", null);
+
+        Assert.Equal(HttpStatusCode.OK, refundResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Payments_refund_succeeds_when_no_provider_was_recorded()
+    {
+        using var factory = new WebApplicationFactory<Nakshatra.Payment.Service.ServiceMarker>();
+        using var client = factory.CreateClient();
+
+        var created = await client.PostAsJsonAsync("/api/payments", new
+        {
+            orderId = "order-no-provider",
+            userId = "user-customer",
+            amount = 10m,
+            currency = "USD",
+            method = "Card",
+            cardNumber = "4242424242424242",
+            cardHolder = "Asha Customer",
+            expiry = "12/34",
+            cvv = "123"
+        });
+        var payment = await created.Content.ReadFromJsonAsync<Nakshatra.Shared.Models.Payment>(ServiceDefaults.JsonOptions);
+
+        payment!.Provider = string.Empty;
+        var repo = factory.Services.GetRequiredService<IDocumentRepository<Nakshatra.Shared.Models.Payment>>();
+        await repo.UpsertAsync(payment);
+
+        var refundResponse = await client.PostAsync($"/api/payments/{payment.Id}/refund", null);
+
+        Assert.Equal(HttpStatusCode.OK, refundResponse.StatusCode);
+    }
+
+    [Fact]
     public async Task Fulfillment_returns_not_found_for_unknown_shipment()
     {
         using var client = CreateClient<Nakshatra.Fulfillment.Service.ServiceMarker>();

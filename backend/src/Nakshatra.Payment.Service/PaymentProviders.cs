@@ -81,9 +81,10 @@ public class StripePaymentProvider : IPaymentProvider
         }
 
         var currency = (string.IsNullOrWhiteSpace(request.Currency) ? "USD" : request.Currency).ToLowerInvariant();
+        var minorUnits = ToMinorUnits(request.Amount, currency);
         var form = new Dictionary<string, string>
         {
-            ["amount"] = ToMinorUnits(request.Amount, currency).ToString(CultureInfo.InvariantCulture),
+            ["amount"] = minorUnits.ToString(CultureInfo.InvariantCulture),
             ["currency"] = currency,
             ["payment_method"] = request.PaymentMethodToken,
             ["confirm"] = "true",
@@ -98,7 +99,7 @@ public class StripePaymentProvider : IPaymentProvider
             {
                 Content = new FormUrlEncodedContent(form)
             };
-            httpRequest.Headers.Add("Idempotency-Key", ComputeIdempotencyKey(request));
+            httpRequest.Headers.Add("Idempotency-Key", ComputeIdempotencyKey(request.OrderId, minorUnits, currency, request.PaymentMethodToken));
 
             using var response = await _httpClient.SendAsync(httpRequest, ct);
             var body = await response.Content.ReadAsStringAsync(ct);
@@ -166,19 +167,20 @@ public class StripePaymentProvider : IPaymentProvider
     }
 
     /// <summary>
-    /// Derives a stable idempotency key from the attempt's identifying parameters, so a network
-    /// retry of the exact same charge reuses the same key (Stripe returns the original result
-    /// instead of creating a second PaymentIntent) while a genuinely new attempt - a different
-    /// amount or instrument - gets its own key.
+    /// Derives a stable idempotency key from the attempt's identifying parameters (already
+    /// normalized to Stripe's minor-unit amount and lowercase currency), so a network retry of
+    /// the exact same charge reuses the same key (Stripe returns the original result instead of
+    /// creating a second PaymentIntent) while a genuinely new attempt - a different amount or
+    /// instrument - gets its own key.
     /// </summary>
-    private static string ComputeIdempotencyKey(PaymentRequest request)
+    private static string ComputeIdempotencyKey(string orderId, long minorUnitAmount, string currency, string? paymentMethodToken)
     {
         var payload = string.Join(
             '|',
-            request.OrderId,
-            request.Amount.ToString(CultureInfo.InvariantCulture),
-            request.Currency ?? string.Empty,
-            request.PaymentMethodToken ?? string.Empty);
+            orderId,
+            minorUnitAmount.ToString(CultureInfo.InvariantCulture),
+            currency,
+            paymentMethodToken ?? string.Empty);
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payload))).ToLowerInvariant();
     }
 

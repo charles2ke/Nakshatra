@@ -34,18 +34,7 @@ public static class NotificationComposer
                 Reference = envelope.Key,
                 Topic = envelope.Topic
             },
-            Topics.PaymentsCompleted => new Notification
-            {
-                UserId = GetString(root, "userId"),
-                Title = GetString(root, "status") == "Captured" ? "Payment successful" : "Payment issue",
-                Body = GetString(root, "status") == "Captured"
-                    ? $"Your payment for order {envelope.Key} was captured."
-                    : $"Your payment for order {envelope.Key} did not go through.",
-                Reference = envelope.Key,
-                Topic = envelope.Topic,
-                Channel = GetString(root, "status") == "Captured" ? NotificationChannel.Email : NotificationChannel.Sms,
-                Severity = GetString(root, "status") == "Captured" ? NotificationSeverity.Info : NotificationSeverity.Warning
-            },
+            Topics.PaymentsCompleted => ComposePaymentNotification(root, envelope),
             Topics.SupplyChainEventRecorded => new Notification
             {
                 UserId = GetString(root, "userId"),
@@ -81,6 +70,23 @@ public static class NotificationComposer
                 Topic = envelope.Topic
             },
             _ => null
+        };
+    }
+
+    private static Notification ComposePaymentNotification(JsonElement root, EventEnvelope envelope)
+    {
+        var captured = GetString(root, "status") == "Captured";
+        return new Notification
+        {
+            UserId = GetString(root, "userId"),
+            Title = captured ? "Payment successful" : "Payment issue",
+            Body = captured
+                ? $"Your payment for order {envelope.Key} was captured."
+                : $"Your payment for order {envelope.Key} did not go through.",
+            Reference = envelope.Key,
+            Topic = envelope.Topic,
+            Channel = captured ? NotificationChannel.Email : NotificationChannel.Sms,
+            Severity = captured ? NotificationSeverity.Info : NotificationSeverity.Warning
         };
     }
 
