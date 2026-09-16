@@ -34,18 +34,9 @@ public static class NotificationComposer
                 Reference = envelope.Key,
                 Topic = envelope.Topic
             },
-            Topics.PaymentsCompleted => new Notification
-            {
-                UserId = GetString(root, "userId"),
-                Title = GetString(root, "status") == "Captured" ? "Payment successful" : "Payment issue",
-                Body = GetString(root, "status") == "Captured"
-                    ? $"Your payment for order {envelope.Key} was captured."
-                    : $"Your payment for order {envelope.Key} did not go through.",
-                Reference = envelope.Key,
-                Topic = envelope.Topic,
-                Channel = NotificationChannel.Email,
-                Severity = GetString(root, "status") == "Captured" ? NotificationSeverity.Info : NotificationSeverity.Warning
-            },
+            // Captured payments are confirmed over email; failures are urgent and time-sensitive, so
+            // ComposePaymentNotification escalates them to SMS instead.
+            Topics.PaymentsCompleted => ComposePaymentNotification(root, envelope),
             Topics.SupplyChainEventRecorded => new Notification
             {
                 UserId = GetString(root, "userId"),
@@ -54,6 +45,8 @@ public static class NotificationComposer
                 Reference = envelope.Key,
                 Topic = envelope.Topic
             },
+            // Low stock is an operational alert for vendors/ops tooling (Slack, Teams, a partner system),
+            // so it is routed through the webhook dispatcher instead of the in-app feed.
             Topics.InventoryLow => new Notification
             {
                 Audience = "Vendor",
@@ -61,6 +54,7 @@ public static class NotificationComposer
                 Body = $"Product {envelope.Key} is below its reorder point. Suggested order: {GetNumber(root, "recommendedOrderQuantity")} unit(s).",
                 Reference = envelope.Key,
                 Topic = envelope.Topic,
+                Channel = NotificationChannel.Webhook,
                 Severity = NotificationSeverity.Warning
             },
             Topics.InventoryReplenishmentOrdered => new Notification
@@ -80,6 +74,23 @@ public static class NotificationComposer
                 Topic = envelope.Topic
             },
             _ => null
+        };
+    }
+
+    private static Notification ComposePaymentNotification(JsonElement root, EventEnvelope envelope)
+    {
+        var captured = GetString(root, "status") == "Captured";
+        return new Notification
+        {
+            UserId = GetString(root, "userId"),
+            Title = captured ? "Payment successful" : "Payment issue",
+            Body = captured
+                ? $"Your payment for order {envelope.Key} was captured."
+                : $"Your payment for order {envelope.Key} did not go through.",
+            Reference = envelope.Key,
+            Topic = envelope.Topic,
+            Channel = captured ? NotificationChannel.Email : NotificationChannel.Sms,
+            Severity = captured ? NotificationSeverity.Info : NotificationSeverity.Warning
         };
     }
 
@@ -150,12 +161,14 @@ public class NotificationConsumer : BackgroundService
 /// <summary>Delivers a notification over its channel.</summary>
 public interface INotificationDispatcher
 {
-    Task DispatchAsync(Notification notification, CancellationToken ct = default);
+    /// <summary>Returns <c>true</c> when the notification was accepted by the delivery provider.</summary>
+    Task<bool> DispatchAsync(Notification notification, CancellationToken ct = default);
 }
 
 /// <summary>
-/// Default dispatcher. Email/SMS providers are not wired up in this repository, so delivery is
-/// logged without any personal data and the notification stays available in the in-app feed.
+/// Fallback dispatcher used when no provider is configured for the channel, or when the provider
+/// could not deliver. Delivery is logged without any personal data and the notification stays
+/// available in the in-app feed.
 /// </summary>
 public class LoggingNotificationDispatcher : INotificationDispatcher
 {
@@ -163,11 +176,11 @@ public class LoggingNotificationDispatcher : INotificationDispatcher
 
     public LoggingNotificationDispatcher(ILogger<LoggingNotificationDispatcher> logger) => _logger = logger;
 
-    public Task DispatchAsync(Notification notification, CancellationToken ct = default)
+    public Task<bool> DispatchAsync(Notification notification, CancellationToken ct = default)
     {
         _logger.LogInformation(
-            "Dispatched {Channel} notification {NotificationId} for topic {Topic} (reference {Reference}).",
-            notification.Channel, notification.Id, notification.Topic, notification.Reference);
-        return Task.CompletedTask;
+            "Dispatched notification {NotificationId} for topic {Topic} (reference {Reference}).",
+            notification.Id, notification.Topic, notification.Reference);
+        return Task.FromResult(true);
     }
 }

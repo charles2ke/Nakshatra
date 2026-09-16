@@ -373,6 +373,10 @@ services:
       Services__Catalog: "http://catalog:8080"
       Services__Recommendation: "http://recommendation:8080"
       Services__Order: "http://order:8080"
+      # Set PAYMENTS_PROVIDER=stripe and STRIPE_SECRET_KEY=sk_... to charge through Stripe;
+      # without them the simulated gateway is used.
+      Payments__Provider: "${PAYMENTS_PROVIDER:-simulated}"
+      Payments__Stripe__SecretKey: "${STRIPE_SECRET_KEY:-}"
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O- http://localhost:8080/health || exit 1"]
       interval: 15s
@@ -531,6 +535,19 @@ services:
       Services__Catalog: "http://catalog:8080"
       Services__Recommendation: "http://recommendation:8080"
       Services__Order: "http://order:8080"
+      Services__User: "http://user:8080"
+      # Delivery providers. Each one is only used when its credentials are supplied; otherwise the
+      # notification is kept in the in-app feed and logged.
+      Notifications__Smtp__Host: "${SMTP_HOST:-}"
+      Notifications__Smtp__Port: "${SMTP_PORT:-587}"
+      Notifications__Smtp__Username: "${SMTP_USERNAME:-}"
+      Notifications__Smtp__Password: "${SMTP_PASSWORD:-}"
+      Notifications__Smtp__FromAddress: "${SMTP_FROM_ADDRESS:-}"
+      Notifications__Twilio__AccountSid: "${TWILIO_ACCOUNT_SID:-}"
+      Notifications__Twilio__AuthToken: "${TWILIO_AUTH_TOKEN:-}"
+      Notifications__Twilio__FromNumber: "${TWILIO_FROM_NUMBER:-}"
+      Notifications__Webhook__Url: "${NOTIFICATIONS_WEBHOOK_URL:-}"
+      Notifications__Webhook__Token: "${NOTIFICATIONS_WEBHOOK_TOKEN:-}"
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O- http://localhost:8080/health || exit 1"]
       interval: 15s

@@ -16,6 +16,10 @@ data:
   Services__Recommendation: "http://recommendation:8080"
   Services__Order: "http://order:8080"
   Services__Inventory: "http://inventory:8080"
+  Services__User: "http://user:8080"
+  # Payment service provider: "simulated" (default) or "stripe"; Stripe also needs the secret key
+  # below. Notification delivery providers are only used when their credentials are present.
+  Payments__Provider: "simulated"
   RateLimit__PermitsPerMinute: "600"
   Cors__AllowedOrigins__0: "https://portal.nakshatra.example"
   ReverseProxy__Clusters__user__Destinations__d1__Address: "http://user:8080"
@@ -44,6 +48,16 @@ type: Opaque
 stringData:
   Mongo__ConnectionString: "mongodb://mongo:27017"
   Internal__Token: "replace-me"
+  Payments__Stripe__SecretKey: ""
+  Notifications__Smtp__Host: ""
+  Notifications__Smtp__Username: ""
+  Notifications__Smtp__Password: ""
+  Notifications__Smtp__FromAddress: ""
+  Notifications__Twilio__AccountSid: ""
+  Notifications__Twilio__AuthToken: ""
+  Notifications__Twilio__FromNumber: ""
+  Notifications__Webhook__Url: ""
+  Notifications__Webhook__Token: ""
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

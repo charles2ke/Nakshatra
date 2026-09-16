@@ -20,6 +20,8 @@ public class User : IEntity
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string Name { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
+    /// <summary>E.164 phone number used for SMS notifications; empty when the user has not shared one.</summary>
+    public string Phone { get; set; } = string.Empty;
     public Persona Persona { get; set; } = Persona.Customer;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
@@ -145,6 +147,10 @@ public class Payment : IEntity
     public PaymentMethod Method { get; set; }
     public string MaskedInstrument { get; set; } = string.Empty;
     public string FailureReason { get; set; } = string.Empty;
+    /// <summary>Payment service provider that handled the charge (for example <c>stripe</c>).</summary>
+    public string Provider { get; set; } = string.Empty;
+    /// <summary>Identifier of the charge at the provider, used for refunds and reconciliation.</summary>
+    public string ProviderReference { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
