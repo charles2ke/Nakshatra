@@ -34,6 +34,8 @@ public static class NotificationComposer
                 Reference = envelope.Key,
                 Topic = envelope.Topic
             },
+            // Payment issues are urgent and time-sensitive, so they go out over SMS instead of email; see
+            // ComposePaymentNotification.
             Topics.PaymentsCompleted => ComposePaymentNotification(root, envelope),
             Topics.SupplyChainEventRecorded => new Notification
             {
@@ -43,6 +45,8 @@ public static class NotificationComposer
                 Reference = envelope.Key,
                 Topic = envelope.Topic
             },
+            // Low stock is an operational alert for vendors/ops tooling (Slack, Teams, a partner system),
+            // so it is routed through the webhook dispatcher instead of the in-app feed.
             Topics.InventoryLow => new Notification
             {
                 Audience = "Vendor",

@@ -172,7 +172,7 @@ public class PaymentProviderTests
     [InlineData("canceled")]
     public async Task Stripe_refund_does_not_succeed_unless_stripe_confirms_it(string status)
     {
-        var (provider, _) = CreateStripe(HttpStatusCode.OK, $$"""{"id":"re_1","status":"{{status}}"}""");
+        var (provider, _) = CreateStripe(HttpStatusCode.OK, "{\"id\":\"re_1\",\"status\":\"" + status + "\"}");
 
         var result = await provider.RefundAsync(new PaymentEntity { ProviderReference = "pi_123" });
 
