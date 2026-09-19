@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { getProduct, getAlsoPurchased, addToCart, getReviews, createReview } from '../api/client';
 import type { Product, Review } from '../api/client';
@@ -18,9 +18,17 @@ export default function ProductPage() {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const reviewRequestId = useRef(0);
 
   const loadReviews = useCallback((productId: string) => {
-    getReviews(productId).then(setReviews).catch(() => setReviews([]));
+    const requestId = ++reviewRequestId.current;
+    getReviews(productId)
+      .then(nextReviews => {
+        if (reviewRequestId.current === requestId) setReviews(nextReviews);
+      })
+      .catch(() => {
+        if (reviewRequestId.current === requestId) setReviews([]);
+      });
   }, []);
 
   useEffect(() => {
@@ -107,7 +115,9 @@ export default function ProductPage() {
                 {[5, 4, 3, 2, 1].map(value => <option key={value} value={value}>{value}</option>)}
               </select>
             </label>
+            <label htmlFor="review-title">{t('reviews.titlePlaceholder')}</label>
             <input
+              id="review-title"
               data-testid="review-title"
               placeholder={t('reviews.titlePlaceholder')}
               value={title}
