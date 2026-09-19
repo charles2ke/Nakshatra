@@ -5,6 +5,11 @@ export const PRODUCTS = [
   { id: 'p2', name: 'Gold Necklace', description: 'Elegant gold necklace', category: 'Jewelry', price: 15000, currency: 'INR', stock: 5, vendorId: 'v1', imageUrl: '', tags: ['gold', 'necklace'] },
 ];
 
+export const REVIEWS = [
+  { id: 'r1', productId: 'p1', userId: 'u1', title: 'Lovely fabric', body: 'The silk feels premium.', rating: 5, mediaIds: [], createdAt: '2024-06-01T10:00:00Z' },
+  { id: 'r2', productId: 'p1', userId: 'u3', title: 'Good value', body: 'Colour is slightly different.', rating: 4, mediaIds: [], createdAt: '2024-05-20T10:00:00Z' },
+];
+
 export const USERS = [
   { id: 'u1', name: 'Alice Kumar', email: 'alice@test.com', persona: 'Customer', createdAt: '2024-01-01T00:00:00Z' },
   { id: 'u2', name: 'Bob Vendor', email: 'bob@test.com', persona: 'Vendor', createdAt: '2024-01-01T00:00:00Z' },
@@ -121,13 +126,25 @@ export async function mockAllApis(page: Page) {
     else route.fulfill({ json: PRODUCTS[0] });
   });
 
+  await page.route('**/api/products/*/reviews', route => {
+    if (route.request().method() === 'GET') route.fulfill({ json: REVIEWS });
+    else route.fulfill({ status: 201, json: { ...REVIEWS[0], id: 'r-new', title: 'Great buy' } });
+  });
+
   // Search
   await page.route('**/api/search**', route => route.fulfill({ json: { items: PRODUCTS, total: 2, page: 1, pageSize: 12 } }));
   await page.route('**/api/search/suggest**', route => route.fulfill({ json: ['Silk', 'Gold'] }));
 
   // Cart - generic first, specific last
   await page.route('**/api/cart/**', route => route.fulfill({ json: CART }));
-  await page.route('**/api/cart/**/items/**', route => route.fulfill({ json: { ...CART, items: [] } }));
+  await page.route('**/api/cart/**/items/**', route => {
+    if (route.request().method() === 'PUT') {
+      const quantity = (route.request().postDataJSON() as { quantity: number }).quantity;
+      route.fulfill({ json: { ...CART, items: [{ ...CART.items[0], quantity }], subtotal: CART.items[0].price * quantity } });
+    } else {
+      route.fulfill({ json: { ...CART, items: [] } });
+    }
+  });
   await page.route('**/api/cart/**/items', route => route.fulfill({ json: { cart: CART, recommendations: [PRODUCTS[1]] } }));
 
   // Recommendations

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getCart, removeFromCart } from '../api/client';
+import { getCart, removeFromCart, updateCartItem } from '../api/client';
 import type { Cart } from '../api/client';
 import { usePersona } from '../context/PersonaContext';
 import { useLocale } from '../i18n/LocaleContext';
@@ -14,6 +14,14 @@ export default function CartPage() {
   useEffect(() => {
     if (currentUser) getCart(currentUser.id).then(setCart).catch(() => {});
   }, [currentUser]);
+
+  async function handleQuantity(productId: string, quantity: number) {
+    if (!currentUser || quantity < 1) return;
+    try {
+      const updated = await updateCartItem(currentUser.id, productId, quantity);
+      setCart(updated);
+    } catch { /* keep the current cart on failure */ }
+  }
 
   async function handleRemove(productId: string) {
     if (!currentUser) return;
@@ -37,7 +45,20 @@ export default function CartPage() {
                 <tr key={item.productId} data-testid={`cart-item-${item.productId}`}>
                   <td>{item.name}</td>
                   <td>{formatCurrency(item.price, 'INR')}</td>
-                  <td>{item.quantity}</td>
+                  <td>
+                    <button
+                      data-testid={`qty-decrease-${item.productId}`}
+                      onClick={() => handleQuantity(item.productId, item.quantity - 1)}
+                      disabled={item.quantity <= 1}
+                      aria-label={t('cart.decrease')}
+                    >-</button>
+                    <span data-testid={`qty-${item.productId}`}>{item.quantity}</span>
+                    <button
+                      data-testid={`qty-increase-${item.productId}`}
+                      onClick={() => handleQuantity(item.productId, item.quantity + 1)}
+                      aria-label={t('cart.increase')}
+                    >+</button>
+                  </td>
                   <td><button data-testid={`remove-${item.productId}`} onClick={() => handleRemove(item.productId)}>{t('cart.remove')}</button></td>
                 </tr>
               ))}

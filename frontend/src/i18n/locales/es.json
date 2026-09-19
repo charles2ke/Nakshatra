@@ -38,6 +38,8 @@
   "cart.col.qty": "Cant.",
   "cart.col.action": "Acción",
   "cart.remove": "Eliminar",
+  "cart.increase": "Aumentar cantidad",
+  "cart.decrease": "Reducir cantidad",
   "cart.subtotal": "Subtotal",
   "cart.checkout": "Pagar",
   "checkout.title": "Pago",
@@ -180,5 +182,18 @@
   "notifications.markRead": "Marcar como leída",
   "notifications.readAll": "Marcar todas como leídas",
   "trace.title": "Seguimiento de la cadena de suministro",
-  "trace.eta": "Entrega estimada"
+  "trace.eta": "Entrega estimada",
+  "reviews.title": "Opiniones de clientes",
+  "reviews.empty": "Aún no hay opiniones. Sé el primero en opinar sobre este producto.",
+  "reviews.average": "Valoración media",
+  "reviews.count": "{count} opiniones",
+  "reviews.formTitle": "Escribe una opinión",
+  "reviews.rating": "Valoración",
+  "reviews.titlePlaceholder": "Título de la opinión",
+  "reviews.bodyPlaceholder": "¿Qué te pareció este producto?",
+  "reviews.submit": "Enviar opinión",
+  "reviews.submitting": "Enviando…",
+  "reviews.submitted": "¡Gracias por tu opinión!",
+  "reviews.submitFailed": "No se pudo enviar tu opinión.",
+  "reviews.noUser": "Selecciona un usuario para escribir una opinión."
 }

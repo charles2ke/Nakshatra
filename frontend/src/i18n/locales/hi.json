@@ -38,6 +38,8 @@
   "cart.col.qty": "मात्रा",
   "cart.col.action": "कार्रवाई",
   "cart.remove": "हटाएँ",
+  "cart.increase": "मात्रा बढ़ाएँ",
+  "cart.decrease": "मात्रा घटाएँ",
   "cart.subtotal": "उप-योग",
   "cart.checkout": "चेकआउट",
   "checkout.title": "चेकआउट",
@@ -180,5 +182,18 @@
   "notifications.markRead": "पढ़ा हुआ चिह्नित करें",
   "notifications.readAll": "सभी को पढ़ा हुआ चिह्नित करें",
   "trace.title": "आपूर्ति शृंखला ट्रैकिंग",
-  "trace.eta": "अनुमानित डिलीवरी"
+  "trace.eta": "अनुमानित डिलीवरी",
+  "reviews.title": "ग्राहक समीक्षाएँ",
+  "reviews.empty": "अभी कोई समीक्षा नहीं है। इस उत्पाद की पहली समीक्षा लिखें।",
+  "reviews.average": "औसत रेटिंग",
+  "reviews.count": "{count} समीक्षाएँ",
+  "reviews.formTitle": "समीक्षा लिखें",
+  "reviews.rating": "रेटिंग",
+  "reviews.titlePlaceholder": "समीक्षा का शीर्षक",
+  "reviews.bodyPlaceholder": "आपको यह उत्पाद कैसा लगा?",
+  "reviews.submit": "समीक्षा भेजें",
+  "reviews.submitting": "भेजा जा रहा है…",
+  "reviews.submitted": "आपकी समीक्षा के लिए धन्यवाद!",
+  "reviews.submitFailed": "आपकी समीक्षा नहीं भेजी जा सकी।",
+  "reviews.noUser": "समीक्षा लिखने के लिए उपयोगकर्ता चुनें।"
 }

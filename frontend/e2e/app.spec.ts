@@ -228,3 +228,38 @@ test('inventory is restricted for the customer persona', async ({ page }) => {
   await page.goto('/inventory');
   await expect(page.locator('[data-testid="access-restricted"]')).toBeVisible();
 });
+
+test('product page lists reviews with an average rating', async ({ page }) => {
+  await mockAllApis(page);
+  await injectCustomerPersona(page);
+  await page.goto('/product/p1');
+  await expect(page.locator('[data-testid="reviews-section"]')).toBeVisible();
+  await expect(page.locator('[data-testid="reviews-list"] li')).toHaveCount(2);
+  await expect(page.locator('[data-testid="reviews-average"]')).toContainText('4.5');
+  await page.screenshot({ path: ss('product-reviews') });
+});
+
+test('customer can submit a product review', async ({ page }) => {
+  await mockAllApis(page);
+  await injectCustomerPersona(page);
+  await page.goto('/product/p1');
+  await page.selectOption('[data-testid="review-rating"]', '4');
+  await page.fill('[data-testid="review-title"]', 'Great buy');
+  await page.fill('[data-testid="review-body"]', 'Arrived quickly and looks great.');
+  await page.click('[data-testid="review-submit"]');
+  await expect(page.locator('.toast')).toBeVisible();
+  await page.screenshot({ path: ss('product-review-submitted') });
+});
+
+test('cart quantity can be increased and decreased', async ({ page }) => {
+  await mockAllApis(page);
+  await injectCustomerPersona(page);
+  await page.goto('/cart');
+  await expect(page.locator('[data-testid="qty-p1"]')).toHaveText('1');
+  await expect(page.locator('[data-testid="qty-decrease-p1"]')).toBeDisabled();
+  await page.click('[data-testid="qty-increase-p1"]');
+  await expect(page.locator('[data-testid="qty-p1"]')).toHaveText('2');
+  await page.screenshot({ path: ss('cart-quantity') });
+  await page.click('[data-testid="qty-decrease-p1"]');
+  await expect(page.locator('[data-testid="qty-p1"]')).toHaveText('1');
+});
