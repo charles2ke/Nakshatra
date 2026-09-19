@@ -143,7 +143,7 @@ Ports shown are the local development ports (`launchSettings.json`, and the gate
 | **Gateway** | Single ingress, CORS, `/api/*` routing to the owning service | `/health`, `/api/**` | — | — |
 | **User** | Users and personas | `/api/users`, `/api/personas`, `/api/users/by-persona/{persona}` | — | — |
 | **Vendor** | Vendor master data | `/api/vendors` | — | — |
-| **Catalog** | Product master data, stock reservation, reviews | `/api/products`, `/api/products/{id}/reserve`, `/api/products/categories` | — | — |
+| **Catalog** | Product master data, stock reservation, reviews | `/api/products`, `/api/products/{id}/reserve`, `/api/products/categories`, `/api/products/{id}/reviews` | — | — |
 | **Search** | Keyword search, filtering, paging and type-ahead over catalog data | `/api/search`, `/api/search/suggest` | — | — |
 | **Cart** | Per-user cart lines | `/api/cart/{userId}` and item add/update/remove | `cart.item-added` | — |
 | **Recommendation** | Co-purchase graph, "also purchased", basket recommendations | `/api/recommendations/also-purchased/{productId}`, `/api/recommendations/basket` | — | `orders.created` |

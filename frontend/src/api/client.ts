@@ -56,10 +56,17 @@ export const searchSuggest = (q: string) => request<string[]>(`/api/search/sugge
 export const getCart = (userId: string) => request<Cart>(`/api/cart/${userId}`);
 export const addToCart = (userId: string, productId: string, quantity: number) =>
   request<{ cart: Cart; recommendations: Product[] }>(`/api/cart/${userId}/items`, { method: 'POST', body: JSON.stringify({ productId, quantity }) });
+export const updateCartItem = (userId: string, productId: string, quantity: number) =>
+  request<Cart>(`/api/cart/${userId}/items/${productId}`, { method: 'PUT', body: JSON.stringify({ productId, quantity }) });
 export const removeFromCart = (userId: string, productId: string) => request<Cart>(`/api/cart/${userId}/items/${productId}`, { method: 'DELETE' });
 export const clearCart = (userId: string) => request<Cart>(`/api/cart/${userId}`, { method: 'DELETE' });
 
 export const getAlsoPurchased = (productId: string, limit = 5) => request<Product[]>(`/api/recommendations/also-purchased/${productId}?limit=${limit}`);
+
+export interface Review { id: string; productId: string; userId: string; title: string; body: string; rating: number; mediaIds: string[]; createdAt: string; }
+export const getReviews = (productId: string) => request<Review[]>(`/api/products/${productId}/reviews`);
+export const createReview = (productId: string, body: { userId: string; title: string; body: string; rating: number }) =>
+  request<Review>(`/api/products/${productId}/reviews`, { method: 'POST', body: JSON.stringify({ ...body, mediaIds: [] }) });
 
 export const createOrder = (body: { userId: string; items: { productId: string; quantity: number }[]; shippingAddress: string }) =>
   request<Order>('/api/orders', { method: 'POST', body: JSON.stringify(body) });

@@ -38,6 +38,8 @@
   "cart.col.qty": "Qty",
   "cart.col.action": "Action",
   "cart.remove": "Remove",
+  "cart.increase": "Increase quantity",
+  "cart.decrease": "Decrease quantity",
   "cart.subtotal": "Subtotal",
   "cart.checkout": "Checkout",
   "checkout.title": "Checkout",
@@ -180,5 +182,18 @@
   "notifications.markRead": "Mark as read",
   "notifications.readAll": "Mark all as read",
   "trace.title": "Supply Chain Tracking",
-  "trace.eta": "Estimated delivery"
+  "trace.eta": "Estimated delivery",
+  "reviews.title": "Customer reviews",
+  "reviews.empty": "No reviews yet. Be the first to review this product.",
+  "reviews.average": "Average rating",
+  "reviews.count": "{count} reviews",
+  "reviews.formTitle": "Write a review",
+  "reviews.rating": "Rating",
+  "reviews.titlePlaceholder": "Review title",
+  "reviews.bodyPlaceholder": "What did you think of this product?",
+  "reviews.submit": "Submit review",
+  "reviews.submitting": "Submitting…",
+  "reviews.submitted": "Thanks for your review!",
+  "reviews.submitFailed": "Could not submit your review.",
+  "reviews.noUser": "Select a user to write a review."
 }
