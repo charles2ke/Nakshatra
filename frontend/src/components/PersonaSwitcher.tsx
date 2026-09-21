@@ -41,11 +41,12 @@ export default function PersonaSwitcher() {
         onClick={openDropdown}
         data-testid="persona-switcher-btn"
         aria-expanded={open}
+        aria-controls={open ? 'persona-dropdown' : undefined}
       >
         {currentUser ? `${currentUser.name} (${currentUser.persona})` : t('persona.selectUser')}
       </button>
       {open && (
-        <div className="persona-dropdown" data-testid="persona-dropdown">
+        <div id="persona-dropdown" className="persona-dropdown" data-testid="persona-dropdown">
           <button
             type="button"
             className="persona-option"
