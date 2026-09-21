@@ -41,16 +41,14 @@ export default function PersonaSwitcher() {
         onClick={openDropdown}
         data-testid="persona-switcher-btn"
         aria-expanded={open}
-        aria-haspopup="menu"
       >
         {currentUser ? `${currentUser.name} (${currentUser.persona})` : t('persona.selectUser')}
       </button>
       {open && (
-        <div className="persona-dropdown" data-testid="persona-dropdown" role="menu">
+        <div className="persona-dropdown" data-testid="persona-dropdown">
           <button
             type="button"
             className="persona-option"
-            role="menuitem"
             data-testid="persona-sign-out"
             onClick={() => { setCurrentUser(null); setOpen(false); }}
           >
@@ -62,7 +60,6 @@ export default function PersonaSwitcher() {
               type="button"
               key={u.id}
               className="persona-option"
-              role="menuitem"
               data-testid={`persona-option-${u.id}`}
               onClick={() => { setCurrentUser({ id: u.id, name: u.name, persona: u.persona }); setOpen(false); }}
             >

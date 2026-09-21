@@ -80,7 +80,7 @@ export default function CartPage() {
               </tbody>
             </table>
           </div>
-          <div data-testid="cart-subtotal">{t('cart.subtotal')}: {formatCurrency(cart.subtotal, 'INR')}</div>
+          <div id="cart-subtotal" data-testid="cart-subtotal">{t('cart.subtotal')}: {formatCurrency(cart.subtotal, 'INR')}</div>
           <button data-testid="checkout-btn" onClick={() => navigate('/checkout')} className="btn-primary">{t('cart.checkout')}</button>
         </>
       )}

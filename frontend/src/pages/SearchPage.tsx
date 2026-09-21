@@ -57,7 +57,7 @@ export default function SearchPage() {
         <button onClick={doSearch} data-testid="search-apply-btn">{t('search.apply')}</button>
       </div>
       {loading && (
-        <div className="skeleton-grid" data-testid="search-loading" aria-label={t('home.loading')}>
+        <div className="skeleton-grid" data-testid="search-loading" role="status" aria-label={t('home.loading')}>
           {Array.from({ length: 8 }, (_, i) => <div key={i} className="skeleton-card" />)}
         </div>
       )}

@@ -63,7 +63,7 @@ export default function HomePage() {
         {toast && <div className="toast" data-testid="cart-toast">{toast}</div>}
       </div>
       {loading && (
-        <div className="skeleton-grid" data-testid="loading" aria-label={t('home.loading')}>
+        <div className="skeleton-grid" data-testid="loading" role="status" aria-label={t('home.loading')}>
           {Array.from({ length: 8 }, (_, i) => <div key={i} className="skeleton-card" />)}
         </div>
       )}
