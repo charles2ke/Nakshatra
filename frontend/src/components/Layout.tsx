@@ -1,4 +1,5 @@
 import { Outlet, NavLink } from 'react-router-dom';
+import type { MouseEvent } from 'react';
 import { usePersona } from '../context/PersonaContext';
 import PersonaSwitcher from './PersonaSwitcher';
 import LanguageSwitcher from './LanguageSwitcher';
@@ -25,10 +26,15 @@ export default function Layout() {
   const { t } = useLocale();
 
   const visibleNav = NAV.filter(n => currentUser && n.allow.includes(currentUser.persona));
+  const focusMainContent = (event: MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    window.history.pushState(null, '', '#main-content');
+    document.getElementById('main-content')?.focus();
+  };
 
   return (
     <div className="app-shell">
-      <a className="skip-link" href="#main-content" data-testid="skip-link">{t('a11y.skipToContent')}</a>
+      <a className="skip-link" href="#main-content" data-testid="skip-link" onClick={focusMainContent}>{t('a11y.skipToContent')}</a>
       <header className="app-header" data-testid="app-header">
         <div className="header-brand">🌟 {t('brand')}</div>
         <nav data-testid="main-nav" aria-label={t('a11y.mainNav')}>

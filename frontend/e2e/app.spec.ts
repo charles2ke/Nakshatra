@@ -286,7 +286,7 @@ test('skip link is focusable and moves focus to the main content', async ({ page
   await expect(page.locator('[data-testid="skip-link"]')).toBeFocused();
   await page.screenshot({ path: ss('skip-link-focus') });
   await page.keyboard.press('Enter');
-  await expect(page.locator('#main-content')).toBeVisible();
+  await expect(page.locator('#main-content')).toBeFocused();
 });
 
 test('persona menu can be operated with the keyboard and closes on Escape', async ({ page }) => {
