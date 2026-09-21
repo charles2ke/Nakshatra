@@ -34,6 +34,12 @@ export default function SearchPage() {
 
   useEffect(() => { doSearch(); }, [q, category, minPrice, maxPrice]);
 
+  function commitOnEnter(key: string) {
+    return (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') setParam(key, e.currentTarget.value);
+    };
+  }
+
   function setParam(key: string, val: string) {
     const p = new URLSearchParams(searchParams);
     if (val) p.set(key, val); else p.delete(key);
@@ -44,15 +50,22 @@ export default function SearchPage() {
     <div data-testid="search-page">
       <h1>{t('search.title')}</h1>
       <div className="search-filters" data-testid="search-filters">
-        <input data-testid="search-q" placeholder={t('search.keywords')} defaultValue={q} onBlur={e => setParam('q', e.target.value)} />
-        <input data-testid="search-category" placeholder={t('search.category')} defaultValue={category} onBlur={e => setParam('category', e.target.value)} />
-        <input data-testid="search-min-price" placeholder={t('search.minPrice')} type="number" defaultValue={minPrice} onBlur={e => setParam('minPrice', e.target.value)} />
-        <input data-testid="search-max-price" placeholder={t('search.maxPrice')} type="number" defaultValue={maxPrice} onBlur={e => setParam('maxPrice', e.target.value)} />
+        <input data-testid="search-q" aria-label={t('search.keywords')} placeholder={t('search.keywords')} defaultValue={q} onBlur={e => setParam('q', e.target.value)} onKeyDown={commitOnEnter('q')} />
+        <input data-testid="search-category" aria-label={t('search.category')} placeholder={t('search.category')} defaultValue={category} onBlur={e => setParam('category', e.target.value)} onKeyDown={commitOnEnter('category')} />
+        <input data-testid="search-min-price" aria-label={t('search.minPrice')} placeholder={t('search.minPrice')} type="number" defaultValue={minPrice} onBlur={e => setParam('minPrice', e.target.value)} onKeyDown={commitOnEnter('minPrice')} />
+        <input data-testid="search-max-price" aria-label={t('search.maxPrice')} placeholder={t('search.maxPrice')} type="number" defaultValue={maxPrice} onBlur={e => setParam('maxPrice', e.target.value)} onKeyDown={commitOnEnter('maxPrice')} />
         <button onClick={doSearch} data-testid="search-apply-btn">{t('search.apply')}</button>
       </div>
-      {loading && <div>{t('home.loading')}</div>}
+      {loading && (
+        <div className="skeleton-grid" data-testid="search-loading" aria-label={t('home.loading')}>
+          {Array.from({ length: 8 }, (_, i) => <div key={i} className="skeleton-card" />)}
+        </div>
+      )}
+      {!loading && result && result.items.length === 0 && (
+        <div className="empty-state" data-testid="search-empty">{t('search.noResults')}</div>
+      )}
       <div data-testid="search-results" className="product-grid">
-        {result?.items.map(p => (
+        {!loading && result?.items.map(p => (
           <ProductCard key={p.id} product={p} onAddToCart={currentUser ? async (p: Product) => { await addToCart(currentUser.id, p.id, 1); } : undefined} />
         ))}
       </div>

@@ -263,3 +263,52 @@ test('cart quantity can be increased and decreased', async ({ page }) => {
   await page.click('[data-testid="qty-decrease-p1"]');
   await expect(page.locator('[data-testid="qty-p1"]')).toHaveText('1');
 });
+
+test('empty search results show a helpful empty state', async ({ page }) => {
+  await mockAllApis(page);
+  await injectCustomerPersona(page);
+  await page.route('**/api/search**', route => route.fulfill({ json: { items: [], total: 0, page: 1, pageSize: 12 } }));
+  await page.goto('/');
+  await expect(page.locator('[data-testid="home-empty"]')).toBeVisible();
+  await page.screenshot({ path: ss('home-empty-state') });
+
+  await page.goto('/search');
+  await expect(page.locator('[data-testid="search-empty"]')).toBeVisible();
+  await page.screenshot({ path: ss('search-empty-state') });
+});
+
+test('skip link is focusable and moves focus to the main content', async ({ page }) => {
+  await mockAllApis(page);
+  await injectCustomerPersona(page);
+  await page.goto('/');
+  await page.waitForSelector('[data-testid="home-page"]');
+  await page.keyboard.press('Tab');
+  await expect(page.locator('[data-testid="skip-link"]')).toBeFocused();
+  await page.screenshot({ path: ss('skip-link-focus') });
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#main-content')).toBeVisible();
+});
+
+test('persona menu can be operated with the keyboard and closes on Escape', async ({ page }) => {
+  await mockAllApis(page);
+  await injectCustomerPersona(page);
+  await page.goto('/');
+  await page.click('[data-testid="persona-switcher-btn"]');
+  await expect(page.locator('[data-testid="persona-dropdown"]')).toBeVisible();
+  await expect(page.locator('[data-testid="persona-switcher-btn"]')).toHaveAttribute('aria-expanded', 'true');
+  await page.locator('[data-testid="persona-option-u2"]').focus();
+  await expect(page.locator('[data-testid="persona-option-u2"]')).toBeFocused();
+  await page.screenshot({ path: ss('persona-menu-keyboard') });
+  await page.keyboard.press('Escape');
+  await expect(page.locator('[data-testid="persona-dropdown"]')).toHaveCount(0);
+});
+
+test('search filters apply when pressing Enter', async ({ page }) => {
+  await mockAllApis(page);
+  await injectCustomerPersona(page);
+  await page.goto('/search');
+  await page.fill('[data-testid="search-category"]', 'Jewelry');
+  await page.press('[data-testid="search-category"]', 'Enter');
+  await expect(page).toHaveURL(/category=Jewelry/);
+  await page.screenshot({ path: ss('search-enter-filter') });
+});

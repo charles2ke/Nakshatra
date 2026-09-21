@@ -81,7 +81,9 @@ export default function ProductPage() {
       <p data-testid="product-desc">{product.description}</p>
       <div>{t('product.category')}: {product.category}</div>
       <div>{t('product.stock')}: {product.stock}</div>
-      {toast && <div className="toast">{toast}</div>}
+      <div className="toast-region" role="status" aria-live="polite">
+        {toast && <div className="toast" data-testid="product-toast">{toast}</div>}
+      </div>
       <button data-testid="product-add-cart" onClick={handleAddToCart} disabled={!currentUser}>{t('product.addToCart')}</button>
       <RecommendationStrip products={recs} />
 

@@ -1,5 +1,7 @@
 {
   "brand": "Nakshatra",
+  "a11y.skipToContent": "Saltar al contenido principal",
+  "a11y.mainNav": "Navegación principal",
   "nav.home": "Inicio",
   "nav.search": "Buscar",
   "nav.cart": "Carrito",
@@ -15,6 +17,7 @@
   "home.searchPlaceholder": "Buscar productos…",
   "home.searchBtn": "Buscar",
   "home.loading": "Cargando…",
+  "home.noResults": "Ningún producto coincide con tu búsqueda. Prueba con otra palabra clave.",
   "home.addedToCart": "Se añadió \"{name}\" al carrito",
   "home.addToCartNoUser": "Por favor seleccione un usuario",
   "home.addToCartFailed": "Error al añadir al carrito",
@@ -142,6 +145,7 @@
   "search.maxPrice": "Precio máx.",
   "search.apply": "Aplicar",
   "search.total": "Total",
+  "search.noResults": "Ningún producto coincide con estos filtros. Amplía el rango de precios o borra la categoría.",
   "common.yes": "Sí",
   "common.no": "No",
   "inventory.title": "Inventario y planificación de demanda",

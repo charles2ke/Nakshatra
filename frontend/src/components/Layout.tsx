@@ -28,9 +28,10 @@ export default function Layout() {
 
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#main-content" data-testid="skip-link">{t('a11y.skipToContent')}</a>
       <header className="app-header" data-testid="app-header">
         <div className="header-brand">🌟 {t('brand')}</div>
-        <nav data-testid="main-nav">
+        <nav data-testid="main-nav" aria-label={t('a11y.mainNav')}>
           {visibleNav.map(n => (
             <NavLink
               key={n.to}
@@ -45,7 +46,7 @@ export default function Layout() {
         <LanguageSwitcher />
         <PersonaSwitcher />
       </header>
-      <main className="app-main">
+      <main className="app-main" id="main-content" tabIndex={-1}>
         <Outlet />
       </main>
     </div>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePersona } from '../context/PersonaContext';
 import { getUsers } from '../api/client';
 import { useLocale } from '../i18n/LocaleContext';
@@ -10,6 +10,7 @@ export default function PersonaSwitcher() {
   const [open, setOpen] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   async function openDropdown() {
     setOpen(o => !o);
@@ -20,20 +21,53 @@ export default function PersonaSwitcher() {
     }
   }
 
+  useEffect(() => {
+    if (!open) return;
+    function onKeyDown(e: KeyboardEvent) { if (e.key === 'Escape') setOpen(false); }
+    function onPointerDown(e: MouseEvent) {
+      if (!containerRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('mousedown', onPointerDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('mousedown', onPointerDown);
+    };
+  }, [open]);
+
   return (
-    <div className="persona-switcher" data-testid="persona-switcher">
-      <button onClick={openDropdown} data-testid="persona-switcher-btn">
+    <div className="persona-switcher" data-testid="persona-switcher" ref={containerRef}>
+      <button
+        onClick={openDropdown}
+        data-testid="persona-switcher-btn"
+        aria-expanded={open}
+        aria-haspopup="menu"
+      >
         {currentUser ? `${currentUser.name} (${currentUser.persona})` : t('persona.selectUser')}
       </button>
       {open && (
-        <div className="persona-dropdown" data-testid="persona-dropdown">
-          <div className="persona-option" onClick={() => { setCurrentUser(null); setOpen(false); }}>{t('persona.signOut')}</div>
-          {loading && <div>{t('persona.loading')}</div>}
+        <div className="persona-dropdown" data-testid="persona-dropdown" role="menu">
+          <button
+            type="button"
+            className="persona-option"
+            role="menuitem"
+            data-testid="persona-sign-out"
+            onClick={() => { setCurrentUser(null); setOpen(false); }}
+          >
+            {t('persona.signOut')}
+          </button>
+          {loading && <div className="persona-option">{t('persona.loading')}</div>}
           {users.map(u => (
-            <div key={u.id} className="persona-option" data-testid={`persona-option-${u.id}`}
-              onClick={() => { setCurrentUser({ id: u.id, name: u.name, persona: u.persona }); setOpen(false); }}>
+            <button
+              type="button"
+              key={u.id}
+              className="persona-option"
+              role="menuitem"
+              data-testid={`persona-option-${u.id}`}
+              onClick={() => { setCurrentUser({ id: u.id, name: u.name, persona: u.persona }); setOpen(false); }}
+            >
               {u.name} <span className="persona-badge">{u.persona}</span>
-            </div>
+            </button>
           ))}
         </div>
       )}
