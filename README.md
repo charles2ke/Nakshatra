@@ -10,6 +10,27 @@ only; set the `VITE_API_BASE_URL` repository variable to a reachable gateway for
 📐 **[Architecture & system design](docs/architecture.md)** — diagrams, service catalog, event
 flows and design trade-offs.
 
+![The Nakshatra portal home page](frontend/e2e/screenshots/home-page.png)
+
+**Contents:** [Quick start](#quick-start) · [At a glance](#at-a-glance) ·
+[Repository layout](#repository-layout) · [What each persona can do](#what-each-persona-can-do) ·
+[Run the full stack](#run-the-full-stack) · [Run pieces individually](#run-pieces-individually) ·
+[Tests and linting](#tests-and-linting) · [Configuration](#configuration) ·
+[External integrations](#external-integrations) · [Troubleshooting](#troubleshooting) ·
+[Deploying to Kubernetes](#deploying-to-kubernetes) ·
+[Deploying the portal to GitHub Pages](#deploying-the-portal-to-github-pages)
+
+## Quick start
+
+| I want to… | Run this | Then open |
+|------------|----------|-----------|
+| See the portal only (no backend) | `cd frontend && npm install && npm run dev` | http://localhost:5173 |
+| Run everything (services, Mongo, Redis, Kafka) | `docker compose up --build` | http://localhost:8080 |
+| Hack on one service | `dotnet run --project backend/src/Nakshatra.Catalog.Service` | http://localhost:5003 |
+
+The portal ships with a persona switcher in the header — pick a user to see the navigation and
+pages available to customers, vendors, admins or fulfillment agents.
+
 ## At a glance
 
 ```mermaid
@@ -42,6 +63,21 @@ flowchart LR
 | `infra/k8s/` | Kubernetes manifests (namespace, config, one per service, portal + ingress) |
 | `docs/architecture.md` | Architecture and system design documentation |
 | `docker-compose.yml` | Full local stack: Mongo, Redis, Kafka, all services and the portal |
+
+## What each persona can do
+
+The portal keeps one navigation shell and swaps the visible pages per persona
+(`frontend/src/components/Layout.tsx` route guards):
+
+| Persona | Pages available |
+|---------|-----------------|
+| **Customer** | Home, Search, Cart, Checkout, Orders, Billing, Notifications |
+| **Vendor** | Home, Orders, Billing, Inventory & demand planning, Products setup, Notifications |
+| **Admin** | Everything, including vendor and user setup |
+| **FulfillmentAgent** | Home, Orders, Fulfillment board, Notifications |
+
+Selecting a user from the header switcher stores the persona locally; picking *Sign out* clears it.
+Restricted routes render an "access restricted" message instead of failing.
 
 ## Run the full stack
 
@@ -118,6 +154,17 @@ With Stripe enabled the portal must tokenize the card with Stripe.js and send th
 as `paymentMethodToken`; requests that still contain a card number are rejected so raw card data
 never reaches the backend. See [`docs/architecture.md`](docs/architecture.md) for the full
 integration design.
+
+## Troubleshooting
+
+| Symptom | Likely cause and fix |
+|---------|----------------------|
+| Portal loads but every list is empty | The gateway is not reachable. Check `VITE_API_BASE_URL` (default `http://localhost:5000`) and `curl http://localhost:5000/health`. |
+| Navigation only shows *Home* | No user is selected — pick one from the persona switcher in the header. |
+| A page says "access restricted" | The selected persona is not allowed on that route; switch to a persona from the table above. |
+| `docker compose up` fails on Kafka or Mongo | Ports 9092/27017/6379 are already in use locally, or the machine is low on memory. Stop the conflicting services or run individual projects instead — Mongo, Redis and Kafka are optional. |
+| Playwright fails with "browser not installed" | Run `npx playwright install --with-deps chromium` in `frontend/`. |
+| Locale shows English text after switching | The key is missing from that catalog; the app falls back to `en` and logs a one-time `console.warn` with the key name. |
 
 ## Deploying to Kubernetes
 

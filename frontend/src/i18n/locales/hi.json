@@ -1,5 +1,7 @@
 {
   "brand": "नक्षत्र",
+  "a11y.skipToContent": "मुख्य सामग्री पर जाएँ",
+  "a11y.mainNav": "मुख्य नेविगेशन",
   "nav.home": "मुख्य पृष्ठ",
   "nav.search": "खोज",
   "nav.cart": "कार्ट",
@@ -15,6 +17,7 @@
   "home.searchPlaceholder": "उत्पाद खोजें…",
   "home.searchBtn": "खोजें",
   "home.loading": "लोड हो रहा है…",
+  "home.noResults": "आपकी खोज से कोई उत्पाद मेल नहीं खाता। कोई दूसरा कीवर्ड आज़माएँ।",
   "home.addedToCart": "\"{name}\" कार्ट में जोड़ा गया",
   "home.addToCartNoUser": "कृपया पहले उपयोगकर्ता चुनें",
   "home.addToCartFailed": "कार्ट में जोड़ना विफल",
@@ -142,6 +145,7 @@
   "search.maxPrice": "अधिकतम मूल्य",
   "search.apply": "लागू करें",
   "search.total": "कुल",
+  "search.noResults": "इन फ़िल्टर से कोई उत्पाद मेल नहीं खाता। मूल्य सीमा बढ़ाएँ या श्रेणी हटाएँ।",
   "common.yes": "हाँ",
   "common.no": "नहीं",
   "inventory.title": "इन्वेंटरी और मांग नियोजन",

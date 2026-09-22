@@ -31,6 +31,25 @@ npm run build
 
 ---
 
+## UX conventions
+
+- **Design tokens** live in `src/index.css` (`:root`): colours, radii, shadows and spacing. Use the
+  variables instead of hard-coded hex values so a theme change stays in one place.
+- **Every interactive element carries a `data-testid`** so Playwright can target it without relying
+  on visible text, which changes per locale.
+- **Accessibility baseline**: a skip link jumps to `#main-content`, all focusable elements get a
+  visible `:focus-visible` ring, icon-only controls have `aria-label`s, toasts sit in an
+  `aria-live="polite"` region, and the persona menu is keyboard operable (closes on `Escape` or an
+  outside click).
+- **Loading and empty states**: lists render shimmer placeholders (`.skeleton-card`) while loading
+  and an `.empty-state` panel with an actionable hint when there is nothing to show — never a blank
+  page.
+- **Motion** is disabled automatically under `prefers-reduced-motion: reduce`.
+- **Responsive**: the header wraps and wide tables are wrapped in `.table-scroll` so they scroll
+  horizontally on small screens instead of overflowing the page.
+
+---
+
 ## Localization (i18n)
 
 The app uses a lightweight, zero-dependency i18n layer built on plain React context.
