@@ -1,28 +1,23 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { searchProducts, addToCart } from '../api/client';
 import type { Product, SearchResult } from '../api/client';
 import ProductCard from '../components/ProductCard';
 import RecommendationStrip from '../components/RecommendationStrip';
+import SuggestInput from '../components/SuggestInput';
 import { usePersona } from '../context/PersonaContext';
+import { useBadges } from '../context/BadgeContext';
 import { useLocale } from '../i18n/LocaleContext';
+import { useToast } from '../hooks/useToast';
 
 export default function HomePage() {
   const { currentUser } = usePersona();
   const { t } = useLocale();
+  const { syncCart } = useBadges();
   const [query, setQuery] = useState('');
   const [result, setResult] = useState<SearchResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [recs, setRecs] = useState<Product[]>([]);
-  const [toast, setToast] = useState('');
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const showToast = useCallback((message: string) => {
-    setToast(message);
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(''), 3000);
-  }, []);
-
-  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
+  const { toast, showToast } = useToast();
 
   async function doSearch(q: string) {
     setLoading(true);
@@ -40,6 +35,7 @@ export default function HomePage() {
     try {
       const res = await addToCart(currentUser.id, p.id, 1);
       setRecs(res.recommendations ?? []);
+      syncCart(res.cart);
       showToast(t('home.addedToCart', { name: p.name }));
     } catch { showToast(t('home.addToCartFailed')); }
   }
@@ -47,18 +43,18 @@ export default function HomePage() {
   return (
     <div data-testid="home-page">
       <h1 data-testid="home-title">{t('home.title')}</h1>
-      <div className="search-bar">
-        <input
-          data-testid="home-search-input"
+      <form className="search-bar" role="search" onSubmit={e => { e.preventDefault(); doSearch(query); }}>
+        <SuggestInput
+          testId="home-search-input"
           type="search"
           aria-label={t('home.searchPlaceholder')}
           placeholder={t('home.searchPlaceholder')}
           value={query}
-          onChange={e => setQuery(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && doSearch(query)}
+          onChange={setQuery}
+          onSelect={s => { setQuery(s); doSearch(s); }}
         />
-        <button data-testid="home-search-btn" onClick={() => doSearch(query)}>{t('home.searchBtn')}</button>
-      </div>
+        <button type="submit" data-testid="home-search-btn">{t('home.searchBtn')}</button>
+      </form>
       <div className="toast-region" role="status" aria-live="polite">
         {toast && <div className="toast" data-testid="cart-toast">{toast}</div>}
       </div>

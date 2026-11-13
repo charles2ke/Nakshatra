@@ -5,9 +5,23 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
     ...init,
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-  return res.json() as Promise<T>;
+  const text = await res.text();
+  if (!res.ok) throw new Error(serverError(text) ?? `HTTP ${res.status}: ${res.statusText}`);
+  // 204 No Content and other empty bodies carry no JSON.
+  return (text ? JSON.parse(text) : undefined) as T;
 }
+
+/** The services explain 4xx/5xx responses with a `{ "error": "..." }` body. */
+function serverError(body: string): string | undefined {
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (parsed && typeof parsed === 'object' && 'error' in parsed && typeof parsed.error === 'string') return parsed.error;
+  } catch { /* not JSON */ }
+  return undefined;
+}
+
+/** A message suitable for showing to the user. */
+export const errorMessage = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 export type Persona = 'Customer' | 'Vendor' | 'Admin' | 'FulfillmentAgent';
 export interface User { id: string; name: string; email: string; persona: Persona; createdAt: string; }
@@ -20,7 +34,7 @@ export interface OrderItem { productId: string; name: string; price: number; qua
 export interface Order { id: string; userId: string; items: OrderItem[]; subtotal: number; tax: number; total: number; currency: string; status: OrderStatus; shippingAddress: string; createdAt: string; }
 export interface StatusHistory { status: string; timestamp: string; note: string; }
 export interface OrderStatusResponse { orderId: string; status: string; history: StatusHistory[]; }
-export type ShipmentStatus = 'Pending'|'Packed'|'Shipped'|'Delivered';
+export type ShipmentStatus = 'Pending'|'Packed'|'Shipped'|'Delivered'|'Cancelled';
 export interface Shipment { orderId: string; status: ShipmentStatus; carrier: string; trackingNumber: string; updatedAt: string; }
 export type PaymentMethod = 'Card'|'UPI'|'NetBanking';
 export type PaymentStatus = 'Authorized'|'Captured'|'Failed'|'Refunded';
@@ -73,6 +87,7 @@ export const createOrder = (body: { userId: string; items: { productId: string; 
 export const getOrdersByUser = (userId: string) => request<Order[]>(`/api/orders/user/${userId}`);
 export const getOrder = (id: string) => request<Order>(`/api/orders/${id}`);
 export const getOrderStatus = (id: string) => request<OrderStatusResponse>(`/api/orders/${id}/status`);
+export const cancelOrder = (id: string) => request<Order>(`/api/orders/${id}/cancel`, { method: 'POST' });
 
 export const getShipments = () => request<Shipment[]>('/api/fulfillment/shipments');
 export const advanceShipment = (orderId: string) => request<Shipment>(`/api/fulfillment/shipments/${orderId}/advance`, { method: 'POST' });

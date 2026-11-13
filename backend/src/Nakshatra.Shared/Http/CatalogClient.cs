@@ -1,4 +1,6 @@
+using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Nakshatra.Shared.Caching;
@@ -66,15 +68,86 @@ public class CatalogClient
         }
     }
 
-    public async Task ReserveStockAsync(string productId, int quantity, CancellationToken ct = default)
+    /// <summary>Takes stock out of the catalog. Callers must release it again if the order is not placed.</summary>
+    public async Task<StockReservationResult> ReserveStockAsync(string productId, int quantity, CancellationToken ct = default)
     {
         try
         {
-            await _httpClient.PostAsJsonAsync($"/api/products/{productId}/reserve", new { quantity }, ct);
+            using var response = await _httpClient.PostAsJsonAsync($"/api/products/{Uri.EscapeDataString(productId)}/reserve", new { quantity }, ct);
+            if (response.IsSuccessStatusCode)
+            {
+                return new StockReservationResult(StockReservationStatus.Reserved);
+            }
+
+            return response.StatusCode switch
+            {
+                HttpStatusCode.Conflict => new StockReservationResult(StockReservationStatus.InsufficientStock, await ReadAvailableAsync(response, ct)),
+                HttpStatusCode.NotFound => new StockReservationResult(StockReservationStatus.ProductNotFound),
+                _ => new StockReservationResult(StockReservationStatus.Failed)
+            };
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
-            _logger.LogWarning(ex, "Could not reserve stock for product {ProductId}.", productId);
+            _logger.LogWarning(ex, "Could not reserve stock for product {ProductId}.", LogSanitizer.Sanitize(productId));
+            return new StockReservationResult(StockReservationStatus.Failed);
         }
     }
+
+    /// <summary>Returns previously reserved stock to the catalog, e.g. when an order is cancelled.</summary>
+    public async Task<bool> ReleaseStockAsync(string productId, int quantity, CancellationToken ct = default)
+    {
+        try
+        {
+            using var response = await _httpClient.PostAsJsonAsync($"/api/products/{Uri.EscapeDataString(productId)}/release", new { quantity }, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Catalog refused to release {Quantity} unit(s) of product {ProductId}: HTTP {StatusCode}.",
+                    quantity, LogSanitizer.Sanitize(productId), (int)response.StatusCode);
+            }
+
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            _logger.LogWarning(ex, "Could not release {Quantity} unit(s) of product {ProductId}.", quantity, LogSanitizer.Sanitize(productId));
+            return false;
+        }
+    }
+
+    /// <summary>Releases every line, ignoring the caller's cancellation so stock is not stranded.</summary>
+    public async Task ReleaseStockAsync(IEnumerable<CartItem> lines)
+    {
+        foreach (var line in lines)
+        {
+            await ReleaseStockAsync(line.ProductId, line.Quantity, CancellationToken.None);
+        }
+    }
+
+    private static async Task<int> ReadAvailableAsync(HttpResponseMessage response, CancellationToken ct)
+    {
+        try
+        {
+            var conflict = await response.Content.ReadFromJsonAsync<StockConflict>(ServiceDefaults.JsonOptions, ct);
+            return conflict?.Available ?? 0;
+        }
+        catch (Exception ex) when (ex is JsonException or NotSupportedException)
+        {
+            return 0;
+        }
+    }
+
+    private sealed record StockConflict(int Available);
+}
+
+public enum StockReservationStatus
+{
+    Reserved,
+    InsufficientStock,
+    ProductNotFound,
+    Failed
+}
+
+public record StockReservationResult(StockReservationStatus Status, int Available = 0)
+{
+    public bool Succeeded => Status == StockReservationStatus.Reserved;
 }

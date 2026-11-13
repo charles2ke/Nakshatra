@@ -1,3 +1,4 @@
+using Nakshatra.Shared.Http;
 using Nakshatra.Shared.Messaging;
 using Nakshatra.Shared.Models;
 using Nakshatra.Shared.Storage;
@@ -27,7 +28,7 @@ public static class OrderStatusUpdater
 
 /// <summary>
 /// Moves an order to <see cref="OrderStatus.Paid"/> when the payment service reports a captured
-/// payment on the <c>payments.completed</c> stream.
+/// payment on the <c>payments.completed</c> stream, and cancels it when the payment is refunded.
 /// </summary>
 public class PaymentStreamConsumer : EventConsumerBackgroundService
 {
@@ -56,12 +57,25 @@ public class PaymentStreamConsumer : EventConsumerBackgroundService
             return;
         }
 
+        if (payment.Status == PaymentStatus.Refunded)
+        {
+            var catalog = scopedServices.GetRequiredService<CatalogClient>();
+            await OrderCancellation.CancelAsync(repo, publisher, catalog, order, $"Payment {payment.Id} refunded.", ct);
+            return;
+        }
+
+        // Late or duplicate payment events must not move an order backwards, e.g. a failed retry
+        // arriving after a successful capture, or any payment event for a cancelled order.
+        if (order.Status is not (OrderStatus.Created or OrderStatus.AwaitingPayment))
+        {
+            return;
+        }
+
         var (status, note) = payment.Status switch
         {
             PaymentStatus.Captured => (OrderStatus.Paid, $"Payment {payment.Id} captured."),
             PaymentStatus.Authorized => (OrderStatus.AwaitingPayment, $"Payment {payment.Id} authorized."),
-            PaymentStatus.Failed => (OrderStatus.AwaitingPayment, $"Payment {payment.Id} failed: {payment.FailureReason}"),
-            _ => (OrderStatus.Cancelled, $"Payment {payment.Id} refunded.")
+            _ => (OrderStatus.AwaitingPayment, $"Payment {payment.Id} failed: {payment.FailureReason}")
         };
 
         await OrderStatusUpdater.ApplyAsync(repo, publisher, order, status, note, ct);

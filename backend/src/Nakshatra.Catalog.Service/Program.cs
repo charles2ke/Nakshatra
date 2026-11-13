@@ -56,6 +56,27 @@ app.MapPost("/api/products/{id}/reserve", async (string id, ReserveStockRequest 
     return Results.Ok(product);
 });
 
+// Stock is returned when an order is cancelled or could not be placed.
+app.MapPost("/api/products/{id}/release", async (string id, ReserveStockRequest request, IDocumentRepository<Product> repo, ICacheService cache) =>
+{
+    if (request.Quantity <= 0)
+    {
+        return Results.BadRequest(new { error = "Quantity must be greater than zero." });
+    }
+
+    var product = await repo.GetAsync(id);
+    if (product is null)
+    {
+        return Results.NotFound();
+    }
+
+    product.Stock += request.Quantity;
+    await repo.UpsertAsync(product);
+    await cache.RemoveAsync("product:all");
+    await cache.SetAsync($"product:{id}", product, TimeSpan.FromMinutes(10));
+    return Results.Ok(product);
+});
+
 // Product reviews. Review photos and videos are uploaded to the media service, which transcodes
 // them asynchronously; only the resulting media ids are stored here.
 app.MapGet("/api/products/{productId}/reviews", async (string productId, IDocumentRepository<Review> repo, CancellationToken ct) =>

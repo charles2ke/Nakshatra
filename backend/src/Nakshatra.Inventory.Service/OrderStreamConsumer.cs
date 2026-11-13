@@ -55,6 +55,43 @@ public class OrderStreamConsumer : EventConsumerBackgroundService
     }
 }
 
+/// <summary>
+/// Reverses the recorded sale when an order is cancelled on <c>orders.status-changed</c> before it
+/// shipped, so on-hand stock is restored and the forecast is not inflated by demand that never left.
+/// </summary>
+public class CancelledOrderStreamConsumer : EventConsumerBackgroundService
+{
+    public CancelledOrderStreamConsumer(IEventSubscriber subscriber, IServiceProvider serviceProvider, ILogger<CancelledOrderStreamConsumer> logger)
+        : base(subscriber, serviceProvider, logger)
+    {
+    }
+
+    protected override string Topic => Topics.OrdersStatusChanged;
+
+    protected override string ConsumerGroup => "inventory-service";
+
+    protected override async Task HandleAsync(EventEnvelope envelope, IServiceProvider scopedServices, CancellationToken ct)
+    {
+        var order = envelope.As<Order>();
+        if (order is not { Status: OrderStatus.Cancelled } || order.HasShipped())
+        {
+            return;
+        }
+
+        var repo = scopedServices.GetRequiredService<IDocumentRepository<InventoryItem>>();
+        foreach (var line in order.Items)
+        {
+            if (await repo.GetAsync(line.ProductId, ct) is not { } item)
+            {
+                continue;
+            }
+
+            InventoryMath.ReverseSale(item, DateOnly.FromDateTime(order.CreatedAt), line.Quantity);
+            await repo.UpsertAsync(item, ct);
+        }
+    }
+}
+
 public static class InventoryMath
 {
     /// <summary>Applies a sale: reduces on-hand stock and appends to the day's sales bucket.</summary>
@@ -76,6 +113,24 @@ public static class InventoryMath
         if (item.SalesHistory.Count > 730)
         {
             item.SalesHistory = item.SalesHistory.OrderByDescending(p => p.Date).Take(730).OrderBy(p => p.Date).ToList();
+        }
+
+        item.UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>Undoes <see cref="RecordSale"/> for a cancelled order: restocks and removes the units sold.</summary>
+    public static void ReverseSale(InventoryItem item, DateOnly date, int quantity)
+    {
+        item.OnHand += quantity;
+
+        var point = item.SalesHistory.FirstOrDefault(p => p.Date == date);
+        if (point is not null)
+        {
+            point.Units = Math.Max(point.Units - quantity, 0);
+            if (point.Units == 0)
+            {
+                item.SalesHistory.Remove(point);
+            }
         }
 
         item.UpdatedAt = DateTime.UtcNow;

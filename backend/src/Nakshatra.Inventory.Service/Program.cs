@@ -8,6 +8,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddNakshatraInfrastructure(builder.Configuration);
 builder.Services.AddHttpClient<CatalogClient>();
 builder.Services.AddHostedService<OrderStreamConsumer>();
+builder.Services.AddHostedService<CancelledOrderStreamConsumer>();
 
 var app = builder.Build();
 app.UseNakshatraDefaults("inventory-service");

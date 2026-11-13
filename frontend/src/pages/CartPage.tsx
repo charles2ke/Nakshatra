@@ -3,19 +3,21 @@ import { useNavigate } from 'react-router-dom';
 import { getCart, removeFromCart, updateCartItem } from '../api/client';
 import type { Cart } from '../api/client';
 import { usePersona } from '../context/PersonaContext';
+import { useBadges } from '../context/BadgeContext';
 import { useLocale } from '../i18n/LocaleContext';
 
 export default function CartPage() {
   const { currentUser } = usePersona();
   const { t, formatCurrency } = useLocale();
+  const { syncCart } = useBadges();
   const [cart, setCart] = useState<Cart | null>(null);
   const pendingQuantityItems = useRef(new Set<string>());
   const [pendingQuantityProductIds, setPendingQuantityProductIds] = useState<Set<string>>(() => new Set());
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (currentUser) getCart(currentUser.id).then(setCart).catch(() => {});
-  }, [currentUser]);
+    if (currentUser) getCart(currentUser.id).then(c => { setCart(c); syncCart(c); }).catch(() => {});
+  }, [currentUser, syncCart]);
 
   async function handleQuantity(productId: string, quantity: number) {
     if (!currentUser || quantity < 1 || pendingQuantityItems.current.has(productId)) return;
@@ -24,6 +26,7 @@ export default function CartPage() {
     try {
       const updated = await updateCartItem(currentUser.id, productId, quantity);
       setCart(updated);
+      syncCart(updated);
     } catch { /* keep the current cart on failure */ }
     finally {
       pendingQuantityItems.current.delete(productId);
@@ -35,6 +38,7 @@ export default function CartPage() {
     if (!currentUser) return;
     const updated = await removeFromCart(currentUser.id, productId);
     setCart(updated);
+    syncCart(updated);
   }
 
   if (!currentUser) return <div>{t('cart.noUser')}</div>;

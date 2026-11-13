@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { mockAllApis, injectCustomerPersona, injectAdminPersona, injectFulfillmentPersona, setPersonaAndReload, ORDER } from './helpers';
+import { mockAllApis, injectCustomerPersona, injectAdminPersona, injectFulfillmentPersona, setPersonaAndReload, CART, ORDER, PRODUCTS, SHIPMENTS } from './helpers';
 import path from 'path';
 
 const ss = (name: string) => path.join('e2e', 'screenshots', `${name}.png`);
@@ -55,12 +55,16 @@ test('checkout and payment flow', async ({ page }) => {
   await page.screenshot({ path: ss('checkout-address') });
   await page.click('[data-testid="place-order-btn"]');
   await expect(page.locator('[data-testid="checkout-payment-step"]')).toBeVisible();
+  // The order total includes tax, so that (not the cart subtotal) is what gets charged.
+  await expect(page.locator('[data-testid="checkout-order-total"]')).toContainText('3,539');
   await page.fill('[data-testid="card-number"]', '4111111111111111');
   await page.fill('[data-testid="card-holder"]', 'Alice Kumar');
   await page.fill('[data-testid="card-expiry"]', '12/26');
   await page.fill('[data-testid="card-cvv"]', '123');
   await page.screenshot({ path: ss('checkout-payment') });
+  const payment = page.waitForRequest(r => r.url().endsWith('/api/payments') && r.method() === 'POST');
   await page.click('[data-testid="pay-btn"]');
+  expect((await payment).postDataJSON()).toMatchObject({ orderId: ORDER.id, amount: ORDER.total, currency: ORDER.currency });
   await page.waitForURL(/\/orders\//);
   await page.screenshot({ path: ss('order-after-payment') });
 });
@@ -311,4 +315,140 @@ test('search filters apply when pressing Enter', async ({ page }) => {
   await page.press('[data-testid="search-category"]', 'Enter');
   await expect(page).toHaveURL(/category=Jewelry/);
   await page.screenshot({ path: ss('search-enter-filter') });
+});
+
+test('header shows cart and unread notification counts', async ({ page }) => {
+  await mockAllApis(page);
+  await injectCustomerPersona(page);
+  await page.route('**/api/cart/**/items', route => route.fulfill({
+    json: { cart: { ...CART, items: [{ ...CART.items[0], quantity: 2 }], subtotal: CART.subtotal * 2 }, recommendations: [] },
+  }));
+  await page.goto('/');
+  await expect(page.locator('[data-testid="nav-cart-badge"]')).toHaveText('1');
+  await expect(page.locator('[data-testid="nav-notifications-badge"]')).toHaveText('2');
+  await expect(page.locator('[data-testid="nav-cart"]')).toHaveAccessibleDescription('Items in cart: 1');
+  await page.click('[data-testid="add-to-cart-p1"]');
+  await expect(page.locator('[data-testid="nav-cart-badge"]')).toHaveText('2');
+  await page.screenshot({ path: ss('header-badges') });
+});
+
+test('customer can cancel an order after confirming', async ({ page }) => {
+  await mockAllApis(page);
+  await injectCustomerPersona(page);
+  await page.goto(`/orders/${ORDER.id}`);
+  const cancelBtn = page.locator('[data-testid="cancel-order-btn"]');
+  await cancelBtn.click();
+  await expect(page.locator('[data-testid="cancel-order-keep"]')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('[data-testid="cancel-order-confirm-panel"]')).toHaveCount(0);
+  await expect(cancelBtn).toBeFocused();
+
+  await cancelBtn.click();
+  await page.screenshot({ path: ss('order-cancel-confirm') });
+  const cancelRequest = page.waitForRequest(r => r.url().endsWith(`/api/orders/${ORDER.id}/cancel`) && r.method() === 'POST');
+  await page.click('[data-testid="cancel-order-confirm"]');
+  await cancelRequest;
+  await expect(page.locator('[data-testid="order-status-badge"]')).toHaveText('Cancelled');
+  await expect(page.locator('[data-testid="order-cancel-notice"]')).toBeVisible();
+  await expect(cancelBtn).toHaveCount(0);
+  await page.screenshot({ path: ss('order-cancelled') });
+});
+
+test('order cancel shows why the service refused it', async ({ page }) => {
+  await mockAllApis(page);
+  await injectCustomerPersona(page);
+  let shipped = false;
+  await page.route(`**/api/orders/${ORDER.id}`, route => route.fulfill({ json: { ...ORDER, status: shipped ? 'Shipped' : 'Paid' } }));
+  await page.route('**/api/orders/*/cancel', route => {
+    shipped = true;
+    route.fulfill({ status: 409, json: { error: 'Shipped orders cannot be cancelled.' } });
+  });
+  await page.goto(`/orders/${ORDER.id}`);
+  await page.click('[data-testid="cancel-order-btn"]');
+  await page.click('[data-testid="cancel-order-confirm"]');
+  await expect(page.locator('[data-testid="order-cancel-error"]')).toHaveText('Shipped orders cannot be cancelled.');
+  // The page re-reads the order, which has shipped in the meantime.
+  await expect(page.locator('[data-testid="order-status-badge"]')).toHaveText('Shipped');
+  await expect(page.locator('[data-testid="cancel-order-btn"]')).toHaveCount(0);
+  await page.screenshot({ path: ss('order-cancel-refused') });
+});
+
+test('checkout shows why an order could not be placed', async ({ page }) => {
+  await mockAllApis(page);
+  await injectCustomerPersona(page);
+  await page.route('**/api/orders', route => route.fulfill({
+    status: 409,
+    json: { error: "'Silk Saree' is out of stock.", productId: 'p1', available: 0 },
+  }));
+  await page.goto('/checkout');
+  await page.fill('[data-testid="checkout-address"]', '123 Main St, Mumbai');
+  await page.click('[data-testid="place-order-btn"]');
+  await expect(page.locator('[data-testid="checkout-error"]')).toHaveText("'Silk Saree' is out of stock.");
+  await expect(page.locator('[data-testid="checkout-address-step"]')).toBeVisible();
+  await page.screenshot({ path: ss('checkout-out-of-stock') });
+});
+
+test('search results can be paged and filters return to the first page', async ({ page }) => {
+  await mockAllApis(page);
+  await injectCustomerPersona(page);
+  await page.route(/\/api\/search(\?|$)/, route => {
+    const requested = Number(new URL(route.request().url()).searchParams.get('page') ?? '1');
+    route.fulfill({ json: { items: PRODUCTS, total: 30, page: requested, pageSize: 12 } });
+  });
+  await page.goto('/search');
+  await expect(page.locator('[data-testid="search-page-indicator"]')).toHaveText('Page 1 of 3');
+  await expect(page.locator('[data-testid="search-prev"]')).toBeDisabled();
+
+  const secondPage = page.waitForRequest(r => {
+    const url = new URL(r.url());
+    return url.pathname === '/api/search' && url.searchParams.get('page') === '2' && url.searchParams.get('pageSize') === '12';
+  });
+  await page.click('[data-testid="search-next"]');
+  await secondPage;
+  await expect(page).toHaveURL(/page=2/);
+  await expect(page.locator('[data-testid="search-page-indicator"]')).toHaveText('Page 2 of 3');
+  await expect(page.locator('[data-testid="search-prev"]')).toBeEnabled();
+  await page.screenshot({ path: ss('search-pagination') });
+
+  await page.fill('[data-testid="search-category"]', 'Jewelry');
+  await page.press('[data-testid="search-category"]', 'Enter');
+  await expect(page).toHaveURL(/category=Jewelry/);
+  await expect(page).not.toHaveURL(/page=/);
+  await expect(page.locator('[data-testid="search-page-indicator"]')).toHaveText('Page 1 of 3');
+});
+
+test('search suggestions can be chosen with the keyboard', async ({ page }) => {
+  await mockAllApis(page);
+  await injectCustomerPersona(page);
+  await page.goto('/search');
+  const input = page.locator('[data-testid="search-q"]');
+  await input.fill('Si');
+  await expect(page.locator('[data-testid="search-q-suggestions"]')).toBeVisible();
+  await expect(input).toHaveAttribute('aria-expanded', 'true');
+  await input.press('ArrowDown');
+  await expect(page.locator('[data-testid="search-q-suggestion-0"]')).toHaveAttribute('aria-selected', 'true');
+  await page.screenshot({ path: ss('search-suggestions') });
+  await input.press('Enter');
+  await expect(page).toHaveURL(/q=Silk/);
+  await expect(input).toHaveValue('Silk');
+  await expect(page.locator('[data-testid="search-q-suggestions"]')).toBeHidden();
+});
+
+test('fulfillment shows why an advance was refused and hides it for cancelled shipments', async ({ page }) => {
+  await mockAllApis(page);
+  await injectFulfillmentPersona(page);
+  const cancelledId = 'ord-002-0000-0000-0000';
+  await page.route('**/api/fulfillment/shipments', route => route.fulfill({
+    json: [SHIPMENTS[0], { ...SHIPMENTS[0], orderId: cancelledId, status: 'Cancelled', trackingNumber: 'BD456' }],
+  }));
+  await page.route('**/api/fulfillment/shipments/**/advance', route => route.fulfill({
+    status: 409,
+    json: { error: 'This order was cancelled and must not be shipped.' },
+  }));
+  await page.goto('/fulfillment');
+  await expect(page.locator(`[data-testid="shipment-status-${cancelledId}"]`)).toHaveText('Cancelled');
+  await expect(page.locator(`[data-testid="advance-${cancelledId}"]`)).toHaveCount(0);
+  await page.click(`[data-testid="advance-${ORDER.id}"]`);
+  await expect(page.locator('[data-testid="fulfillment-error"]')).toHaveText('This order was cancelled and must not be shipped.');
+  await page.screenshot({ path: ss('fulfillment-advance-refused') });
 });
