@@ -192,6 +192,32 @@ public class OrderLifecycleTests
         Assert.Equal(HttpStatusCode.Conflict, advance.StatusCode);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Cancellation_and_creation_events_leave_a_cancelled_shipment(bool cancellationFirst)
+    {
+        var order = TestHosts.AwaitingPayment(50m);
+        order.Status = OrderStatus.Cancelled;
+        using var fulfillment = TestHosts.Create<Nakshatra.Fulfillment.Service.ServiceMarker>();
+        using var client = fulfillment.CreateClient();
+        var events = fulfillment.Services.GetRequiredService<IEventPublisher>();
+
+        if (cancellationFirst)
+        {
+            await events.PublishAsync(Topics.OrdersStatusChanged, order.Id, order);
+            await events.PublishAsync(Topics.OrdersCreated, order.Id, order);
+        }
+        else
+        {
+            await events.PublishAsync(Topics.OrdersCreated, order.Id, order);
+            await events.PublishAsync(Topics.OrdersStatusChanged, order.Id, order);
+        }
+
+        var shipment = await client.GetFromJsonAsync<Shipment>($"/api/fulfillment/shipments/{order.Id}", ServiceDefaults.JsonOptions);
+        Assert.Equal(ShipmentStatus.Cancelled, shipment!.Status);
+    }
+
     [Fact]
     public async Task Placing_an_order_removes_the_ordered_items_from_the_cart()
     {

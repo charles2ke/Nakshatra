@@ -26,8 +26,13 @@ public class OrderCancellationConsumer : EventConsumerBackgroundService
         }
 
         var repo = scopedServices.GetRequiredService<IDocumentRepository<Shipment>>();
-        var shipment = await repo.GetAsync(order.Id, ct);
-        if (shipment is null || shipment.Status is not (ShipmentStatus.Pending or ShipmentStatus.Packed))
+        var shipment = await repo.GetAsync(order.Id, ct) ?? new Shipment
+        {
+            Id = order.Id,
+            OrderId = order.Id,
+            TrackingNumber = $"NK{order.Id[..Math.Min(8, order.Id.Length)].ToUpperInvariant()}"
+        };
+        if (shipment.Status is not (ShipmentStatus.Pending or ShipmentStatus.Packed))
         {
             return;
         }
