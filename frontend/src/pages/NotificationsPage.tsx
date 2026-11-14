@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useLayoutEffect, useRef } from 'react';
 import { getNotifications, markNotificationRead, markAllNotificationsRead, errorMessage } from '../api/client';
 import type { AppNotification } from '../api/client';
 import { usePersona } from '../context/PersonaContext';
@@ -14,38 +14,56 @@ export default function NotificationsPage() {
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const activeContext = useRef('');
+  const requestVersion = useRef(0);
+  const contextKey = `${currentUser?.id ?? ''}:${currentUser?.persona ?? ''}:${unreadOnly}`;
+  useLayoutEffect(() => { activeContext.current = contextKey; }, [contextKey]);
 
   const load = useCallback(async () => {
     if (!currentUser) return;
+    const context = `${currentUser.id}:${currentUser.persona}:${unreadOnly}`;
+    const version = ++requestVersion.current;
     setLoading(true);
     try {
       const feed = await getNotifications({ userId: currentUser.id, audience: currentUser.persona, unreadOnly });
+      if (activeContext.current !== context || requestVersion.current !== version) return;
       setItems(feed.items);
       setUnreadCount(feed.unreadCount);
       syncUnread(feed.unreadCount);
-    } catch (e) { setError(errorMessage(e)); }
-    setLoading(false);
+    } catch (e) {
+      if (activeContext.current === context && requestVersion.current === version) setError(errorMessage(e));
+    } finally {
+      if (activeContext.current === context && requestVersion.current === version) setLoading(false);
+    }
   }, [currentUser, unreadOnly, syncUnread]);
 
   useEffect(() => { load(); }, [load]);
 
   async function handleRead(id: string) {
+    const context = activeContext.current;
     setError('');
     try {
       const updated = await markNotificationRead(id);
+      if (activeContext.current !== context) return;
       setItems(prev => prev.map(n => n.id === id ? updated : n));
       setUnreadCount(c => Math.max(c - 1, 0));
       refreshBadges();
-    } catch (e) { setError(errorMessage(e)); }
+    } catch (e) {
+      if (activeContext.current === context) setError(errorMessage(e));
+    }
   }
 
   async function handleReadAll() {
     if (!currentUser) return;
+    const context = activeContext.current;
     setError('');
     try {
       await markAllNotificationsRead({ userId: currentUser.id, audience: currentUser.persona });
+      if (activeContext.current !== context) return;
       await load();
-    } catch (e) { setError(errorMessage(e)); }
+    } catch (e) {
+      if (activeContext.current === context) setError(errorMessage(e));
+    }
   }
 
   if (!currentUser) return <div data-testid="notifications-no-user">{t('notifications.noUser')}</div>;

@@ -51,7 +51,7 @@ export default function SearchPage() {
       pageSize: PAGE_SIZE,
     })
       .then(r => { if (current) setLoaded({ key: searchKey, result: r }); })
-      .catch(() => { if (current) setLoaded(prev => ({ key: searchKey, result: prev.result })); });
+      .catch(() => { if (current) setLoaded({ key: searchKey, result: null }); });
     return () => { current = false; };
   }, [q, category, minPrice, maxPrice, page, searchKey]);
 

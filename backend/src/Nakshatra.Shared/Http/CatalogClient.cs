@@ -50,21 +50,32 @@ public class CatalogClient
     }
 
     public async Task<Product?> GetProductAsync(string id, CancellationToken ct = default)
+        => (await LookupProductAsync(id, ct)).Product;
+
+    public async Task<ProductLookupResult> LookupProductAsync(string id, CancellationToken ct = default)
     {
         try
         {
             var response = await _httpClient.GetAsync($"/api/products/{id}", ct);
-            if (!response.IsSuccessStatusCode)
+            if (response.StatusCode == HttpStatusCode.NotFound)
             {
-                return null;
+                return new ProductLookupResult(ProductLookupStatus.NotFound);
             }
 
-            return await response.Content.ReadFromJsonAsync<Product>(ServiceDefaults.JsonOptions, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                return new ProductLookupResult(ProductLookupStatus.Unavailable);
+            }
+
+            var product = await response.Content.ReadFromJsonAsync<Product>(ServiceDefaults.JsonOptions, ct);
+            return product is null
+                ? new ProductLookupResult(ProductLookupStatus.Unavailable)
+                : new ProductLookupResult(ProductLookupStatus.Found, product);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
             _logger.LogWarning(ex, "Catalog service unavailable while loading product {ProductId}.", id);
-            return null;
+            return new ProductLookupResult(ProductLookupStatus.Unavailable);
         }
     }
 
@@ -151,3 +162,12 @@ public record StockReservationResult(StockReservationStatus Status, int Availabl
 {
     public bool Succeeded => Status == StockReservationStatus.Reserved;
 }
+
+public enum ProductLookupStatus
+{
+    Found,
+    NotFound,
+    Unavailable
+}
+
+public record ProductLookupResult(ProductLookupStatus Status, Product? Product = null);

@@ -40,8 +40,13 @@ app.MapPost("/api/orders", async (
             return Results.BadRequest(new { error = "Item quantities must be greater than zero." });
         }
 
-        var product = await catalog.GetProductAsync(line.ProductId, ct);
-        if (product is null)
+        var lookup = await catalog.LookupProductAsync(line.ProductId, ct);
+        if (lookup.Status == ProductLookupStatus.Unavailable)
+        {
+            return Results.Json(new { error = "The catalog could not be reached right now. Please try again." }, statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+
+        if (lookup.Product is not { } product)
         {
             return Results.BadRequest(new { error = $"Product '{line.ProductId}' was not found." });
         }
@@ -123,6 +128,7 @@ app.MapPost("/api/orders/{id}/status", async (
     string id,
     UpdateOrderStatusRequest request,
     IDocumentRepository<Order> repo,
+    IDocumentRepository<OrderCancellationWork> cancellationWorkRepo,
     IEventPublisher publisher,
     CatalogClient catalog,
     CancellationToken ct) =>
@@ -141,7 +147,7 @@ app.MapPost("/api/orders/{id}/status", async (
     if (status == OrderStatus.Cancelled)
     {
         var note = string.IsNullOrWhiteSpace(request.Note) ? "Order cancelled." : request.Note;
-        return Results.Ok(await OrderCancellation.CancelAsync(repo, publisher, catalog, order, note, ct));
+        return Results.Ok(await OrderCancellation.CancelAsync(repo, cancellationWorkRepo, publisher, catalog, order, note, ct));
     }
 
     if (order.Status == OrderStatus.Cancelled)
@@ -157,6 +163,7 @@ app.MapPost("/api/orders/{id}/status", async (
 app.MapPost("/api/orders/{id}/cancel", async (
     string id,
     IDocumentRepository<Order> repo,
+    IDocumentRepository<OrderCancellationWork> cancellationWorkRepo,
     IEventPublisher publisher,
     CatalogClient catalog,
     CancellationToken ct) =>
@@ -172,7 +179,7 @@ app.MapPost("/api/orders/{id}/cancel", async (
         return Results.Conflict(new { error = "Shipped orders cannot be cancelled." });
     }
 
-    var updated = await OrderCancellation.CancelAsync(repo, publisher, catalog, order, "Cancelled by user.", ct);
+    var updated = await OrderCancellation.CancelAsync(repo, cancellationWorkRepo, publisher, catalog, order, "Cancelled by user.", ct);
     return Results.Ok(updated);
 });
 

@@ -216,6 +216,35 @@ test('notifications page lists the feed and marks one read', async ({ page }) =>
   await page.screenshot({ path: ss('notifications-page') });
 });
 
+test('notifications from a previous persona cannot overwrite the active feed or badge', async ({ page }) => {
+  await mockAllApis(page);
+  await injectCustomerPersona(page);
+  let releaseCustomerResponse!: () => void;
+  const customerResponsePaused = new Promise<void>(resolve => { releaseCustomerResponse = resolve; });
+  let signalCustomerRequest!: () => void;
+  const customerRequestStarted = new Promise<void>(resolve => { signalCustomerRequest = resolve; });
+  await page.route(url =>
+    url.pathname === '/api/notifications'
+      && url.searchParams.get('userId') === 'u1'
+      && url.searchParams.get('unreadOnly') === 'false',
+  async route => {
+    signalCustomerRequest();
+    await customerResponsePaused;
+    await route.fulfill({ json: { items: [], unreadCount: 99 } });
+  });
+  await page.route(url => url.pathname === '/api/notifications' && url.searchParams.get('userId') === 'u3',
+    route => route.fulfill({ json: { items: [], unreadCount: 7 } }));
+
+  await page.goto('/notifications');
+  await customerRequestStarted;
+  await page.click('[data-testid="persona-switcher-btn"]');
+  await page.click('[data-testid="persona-option-u3"]');
+  await expect(page.locator('[data-testid="notifications-unread-count"]')).toContainText('7');
+  releaseCustomerResponse();
+  await expect(page.locator('[data-testid="notifications-unread-count"]')).toContainText('7');
+  await expect(page.locator('[data-testid="nav-notifications-badge"]')).toHaveText('7');
+});
+
 test('order detail shows the supply chain trace', async ({ page }) => {
   await mockAllApis(page);
   await injectCustomerPersona(page);
@@ -415,6 +444,24 @@ test('search results can be paged and filters return to the first page', async (
   await expect(page).toHaveURL(/category=Jewelry/);
   await expect(page).not.toHaveURL(/page=/);
   await expect(page.locator('[data-testid="search-page-indicator"]')).toHaveText('Page 1 of 3');
+});
+
+test('failed search pagination does not show results from the previous page', async ({ page }) => {
+  await mockAllApis(page);
+  await injectCustomerPersona(page);
+  await page.route(/\/api\/search(\?|$)/, route => {
+    const requestedPage = new URL(route.request().url()).searchParams.get('page');
+    if (requestedPage === '2') return route.abort();
+    return route.fulfill({ json: { items: PRODUCTS, total: 30, page: 1, pageSize: 12 } });
+  });
+
+  await page.goto('/search');
+  await expect(page.locator('[data-testid="product-card-p1"]')).toBeVisible();
+  await page.click('[data-testid="search-next"]');
+  await expect(page).toHaveURL(/page=2/);
+  await expect(page.locator('[data-testid="search-loading"]')).toHaveCount(0);
+  await expect(page.locator('[data-testid="product-card-p1"]')).toHaveCount(0);
+  await expect(page.locator('[data-testid="search-total"]')).toHaveCount(0);
 });
 
 test('search suggestions can be chosen with the keyboard', async ({ page }) => {

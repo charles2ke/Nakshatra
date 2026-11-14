@@ -31,6 +31,23 @@ public class InventoryItem : IEntity
     public int Available => Math.Max(OnHand - Reserved, 0);
 }
 
+public class InventoryOrderState : IEntity
+{
+    public string Id { get; set; } = string.Empty;
+    public bool Cancelled { get; set; }
+    public bool SaleRecorded { get; set; }
+    public List<InventoryOrderLine> Lines { get; set; } = new();
+}
+
+public class InventoryOrderLine
+{
+    public string ProductId { get; set; } = string.Empty;
+    public DateOnly SaleDate { get; set; }
+    public int StockDecremented { get; set; }
+    public int DemandQuantity { get; set; }
+    public bool Reversed { get; set; }
+}
+
 public record ForecastPoint(DateOnly Date, double ForecastUnits);
 
 public record InventoryForecast(

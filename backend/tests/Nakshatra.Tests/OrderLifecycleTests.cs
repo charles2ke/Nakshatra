@@ -3,6 +3,8 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Nakshatra.Inventory.Service;
+using Nakshatra.Payment.Service;
 using Nakshatra.Shared;
 using Nakshatra.Shared.Http;
 using Nakshatra.Shared.Messaging;
@@ -70,6 +72,53 @@ public class OrderLifecycleTests
         Assert.Equal(OrderStatus.Cancelled, (await GetOrderAsync(orderClient, order.Id)).Status);
     }
 
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound, HttpStatusCode.BadRequest)]
+    [InlineData(HttpStatusCode.InternalServerError, HttpStatusCode.ServiceUnavailable)]
+    public async Task Order_product_lookup_distinguishes_missing_products_from_catalog_outages(
+        HttpStatusCode catalogStatus, HttpStatusCode expectedStatus)
+    {
+        using var orders = TestHosts.Create<OrderService>(services =>
+            services.Route<CatalogClient>(() => new StubHttpMessageHandler(catalogStatus, "{}")));
+        using var client = orders.CreateClient();
+
+        var response = await client.PostAsJsonAsync("/api/orders", new
+        {
+            userId = $"user-{Guid.NewGuid():N}",
+            items = new[] { new { productId = "unknown-product", quantity = 1 } }
+        });
+
+        Assert.Equal(expectedStatus, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Cancellation_work_retries_publication_and_stock_release_after_failure()
+    {
+        using var catalog = TestHosts.Create<CatalogService>();
+        var publisher = new FailOnceCancellationPublisher();
+        using var orders = TestHosts.Create<OrderService>(services =>
+        {
+            services.Route<CatalogClient>(() => catalog.Server.CreateHandler());
+            services.AddSingleton<IEventPublisher>(publisher);
+        });
+        using var catalogClient = catalog.CreateClient();
+        using var orderClient = orders.CreateClient();
+        var product = await CreateProductAsync(catalogClient, stock: 5);
+        var order = await PlaceOrderAsync(orderClient, product, quantity: 2);
+
+        var firstAttempt = await orderClient.PostAsync($"/api/orders/{order.Id}/cancel", null);
+
+        Assert.Equal(HttpStatusCode.InternalServerError, firstAttempt.StatusCode);
+        Assert.Equal(3, (await GetProductAsync(catalogClient, product.Id)).Stock);
+        Assert.Equal(OrderStatus.Cancelled, (await GetOrderAsync(orderClient, order.Id)).Status);
+
+        var retry = await orderClient.PostAsync($"/api/orders/{order.Id}/cancel", null);
+
+        Assert.Equal(HttpStatusCode.OK, retry.StatusCode);
+        Assert.Equal(5, (await GetProductAsync(catalogClient, product.Id)).Stock);
+        Assert.Equal(2, publisher.CancellationPublications);
+    }
+
     [Fact]
     public async Task Cancelling_after_shipment_does_not_restock()
     {
@@ -134,6 +183,30 @@ public class OrderLifecycleTests
         Assert.Equal(108m, payment!.Amount);
         Assert.Equal("USD", payment.Currency);
         Assert.Equal(order.UserId, payment.UserId);
+    }
+
+    [Fact]
+    public async Task Concurrent_payment_requests_claim_an_order_before_authorizing()
+    {
+        var order = TestHosts.AwaitingPayment(50m);
+        var provider = new BlockingPaymentProvider();
+        using var payments = TestHosts.Create<Nakshatra.Payment.Service.ServiceMarker>(services =>
+        {
+            services.Route<OrderClient>(() => new StubHttpMessageHandler(HttpStatusCode.OK, JsonSerializer.Serialize(order, ServiceDefaults.JsonOptions)));
+            services.AddSingleton<IPaymentProvider>(provider);
+        });
+        using var client = payments.CreateClient();
+
+        var firstRequest = client.PostAsJsonAsync("/api/payments", CardPayment(order));
+        await provider.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var secondResponse = await client.PostAsJsonAsync("/api/payments", CardPayment(order));
+        provider.CompleteAuthorization();
+        var firstResponse = await firstRequest;
+
+        Assert.Equal(HttpStatusCode.Conflict, secondResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, firstResponse.StatusCode);
+        Assert.Equal(1, provider.AuthorizationCount);
+        Assert.Single((await client.GetFromJsonAsync<List<PaymentEntity>>($"/api/payments/by-order/{order.Id}", ServiceDefaults.JsonOptions))!);
     }
 
     [Theory]
@@ -218,6 +291,48 @@ public class OrderLifecycleTests
         Assert.Equal(ShipmentStatus.Cancelled, shipment!.Status);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Inventory_reconciles_cancellation_and_creation_in_either_order(bool cancellationFirst)
+    {
+        var orderId = Guid.NewGuid().ToString("N");
+        var productId = Guid.NewGuid().ToString("N");
+        var created = new OrderEntity
+        {
+            Id = orderId,
+            CreatedAt = DateTime.UtcNow,
+            Status = OrderStatus.AwaitingPayment,
+            Items = { new CartItem { ProductId = productId, Quantity = 5 } }
+        };
+        var cancelled = new OrderEntity
+        {
+            Id = orderId,
+            CreatedAt = created.CreatedAt,
+            Status = OrderStatus.Cancelled,
+            Items = { new CartItem { ProductId = productId, Quantity = 5 } }
+        };
+        using var inventory = TestHosts.Create<Nakshatra.Inventory.Service.ServiceMarker>();
+        var repository = inventory.Services.GetRequiredService<IDocumentRepository<InventoryItem>>();
+        await repository.UpsertAsync(new InventoryItem { Id = productId, ProductId = productId, OnHand = 3 });
+        var events = inventory.Services.GetRequiredService<IEventPublisher>();
+
+        if (cancellationFirst)
+        {
+            await events.PublishAsync(Topics.OrdersStatusChanged, orderId, cancelled);
+            await events.PublishAsync(Topics.OrdersCreated, orderId, created);
+        }
+        else
+        {
+            await events.PublishAsync(Topics.OrdersCreated, orderId, created);
+            await events.PublishAsync(Topics.OrdersStatusChanged, orderId, cancelled);
+        }
+
+        var item = await repository.GetAsync(productId);
+        Assert.Equal(3, item!.OnHand);
+        Assert.Empty(item.SalesHistory);
+    }
+
     [Fact]
     public async Task Placing_an_order_removes_the_ordered_items_from_the_cart()
     {
@@ -292,4 +407,45 @@ public class OrderLifecycleTests
     private sealed record CardPaymentRequest(
         string OrderId, string UserId, decimal Amount, string Currency, string Method,
         string CardNumber, string CardHolder, string Expiry, string Cvv);
+
+    private sealed class FailOnceCancellationPublisher : IEventPublisher
+    {
+        private int _fail = 1;
+        public int CancellationPublications { get; private set; }
+
+        public Task PublishAsync<T>(string topic, string key, T payload, CancellationToken ct = default)
+        {
+            if (topic == Topics.OrdersStatusChanged)
+            {
+                CancellationPublications++;
+                if (Interlocked.Exchange(ref _fail, 0) == 1)
+                {
+                    throw new InvalidOperationException("Simulated publication failure.");
+                }
+            }
+
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class BlockingPaymentProvider : IPaymentProvider
+    {
+        private readonly TaskCompletionSource<bool> _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<bool> Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public int AuthorizationCount { get; private set; }
+        public string Name => "test";
+
+        public async Task<GatewayResult> AuthorizeAsync(PaymentRequest request, PaymentMethod method, CancellationToken ct = default)
+        {
+            AuthorizationCount++;
+            Started.TrySetResult(true);
+            await _completion.Task.WaitAsync(ct);
+            return new GatewayResult(true, "Card on file", string.Empty);
+        }
+
+        public Task<RefundResult> RefundAsync(PaymentEntity payment, CancellationToken ct = default)
+            => Task.FromResult(new RefundResult(true, string.Empty));
+
+        public void CompleteAuthorization() => _completion.TrySetResult(true);
+    }
 }

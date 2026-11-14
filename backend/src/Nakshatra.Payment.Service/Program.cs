@@ -19,6 +19,7 @@ app.UseNakshatraDefaults("payment-service");
 app.MapPost("/api/payments", async (
     PaymentRequest request,
     IDocumentRepository<Payment> repo,
+    IDocumentRepository<PaymentAttempt> attempts,
     IEventPublisher publisher,
     IPaymentProvider provider,
     OrderClient orders,
@@ -67,6 +68,11 @@ app.MapPost("/api/payments", async (
         return Results.BadRequest(new { error = $"The payment currency must be {order.Currency}." });
     }
 
+    if (!await attempts.TryCreateAsync(new PaymentAttempt { Id = order.Id }, ct))
+    {
+        return Results.Conflict(new { error = "This order already has a payment attempt in progress or has been paid." });
+    }
+
     var result = await provider.AuthorizeAsync(request with { Currency = order.Currency }, method, ct);
     var payment = new Payment
     {
@@ -84,6 +90,10 @@ app.MapPost("/api/payments", async (
 
     await repo.UpsertAsync(payment, ct);
     await publisher.PublishAsync(Topics.PaymentsCompleted, payment.OrderId, payment, ct);
+    if (!result.Approved)
+    {
+        await attempts.DeleteAsync(order.Id, ct);
+    }
 
     return result.Approved
         ? Results.Created($"/api/payments/{payment.Id}", payment)

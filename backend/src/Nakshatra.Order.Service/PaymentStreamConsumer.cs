@@ -50,6 +50,7 @@ public class PaymentStreamConsumer : EventConsumerBackgroundService
         }
 
         var repo = scopedServices.GetRequiredService<IDocumentRepository<Order>>();
+        var cancellationWorkRepo = scopedServices.GetRequiredService<IDocumentRepository<OrderCancellationWork>>();
         var publisher = scopedServices.GetRequiredService<IEventPublisher>();
         var order = await repo.GetAsync(payment.OrderId, ct);
         if (order is null)
@@ -60,7 +61,7 @@ public class PaymentStreamConsumer : EventConsumerBackgroundService
         if (payment.Status == PaymentStatus.Refunded)
         {
             var catalog = scopedServices.GetRequiredService<CatalogClient>();
-            await OrderCancellation.CancelAsync(repo, publisher, catalog, order, $"Payment {payment.Id} refunded.", ct);
+            await OrderCancellation.CancelAsync(repo, cancellationWorkRepo, publisher, catalog, order, $"Payment {payment.Id} refunded.", ct);
             return;
         }
 
