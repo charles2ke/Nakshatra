@@ -1,3 +1,4 @@
+using Nakshatra.Cart.Service;
 using Nakshatra.Shared;
 using Nakshatra.Shared.Http;
 using Nakshatra.Shared.Messaging;
@@ -8,6 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddNakshatraInfrastructure(builder.Configuration);
 builder.Services.AddHttpClient<CatalogClient>();
 builder.Services.AddHttpClient<RecommendationClient>();
+builder.Services.AddHostedService<OrderStreamConsumer>();
 
 var app = builder.Build();
 app.UseNakshatraDefaults("cart-service");

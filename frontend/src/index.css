@@ -7,6 +7,8 @@
   --page: #f4f5f7;
   --border: #e0e2e8;
   --muted: #6b7280;
+  --danger: #c82333;
+  --danger-strong: #a71d2a;
   --radius: 10px;
   --radius-sm: 6px;
   --shadow-sm: 0 1px 3px rgba(16, 20, 40, .08);
@@ -32,6 +34,9 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 nav { display: flex; gap: 6px; flex: 1; flex-wrap: wrap; }
 .nav-link { color: #d5d7e0; text-decoration: none; padding: 6px 10px; border-radius: var(--radius-sm); font-size: 0.9rem; transition: background .15s, color .15s; }
 .nav-link:hover, .nav-link.active { background: var(--accent); color: #000; }
+.nav-item { position: relative; display: inline-flex; }
+.nav-item.has-badge { margin-right: 8px; }
+.nav-badge { position: absolute; top: -4px; right: -8px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent); color: var(--ink); box-shadow: 0 0 0 2px var(--ink); font-size: 0.7rem; font-weight: 700; line-height: 18px; text-align: center; pointer-events: none; }
 .app-main { flex: 1; padding: 24px; max-width: 1200px; margin: 0 auto; width: 100%; }
 
 .persona-switcher { position: relative; }
@@ -46,6 +51,18 @@ nav { display: flex; gap: 6px; flex: 1; flex-wrap: wrap; }
 .search-bar input { flex: 1; min-width: 200px; padding: 10px 12px; border: 1px solid #ccc; border-radius: var(--radius-sm); font-size: 1rem; }
 .search-bar button, .btn-primary { padding: 10px 18px; background: var(--ink); color: #fff; border: none; border-radius: var(--radius-sm); cursor: pointer; font-weight: 600; }
 .btn-primary:hover, .search-bar button:hover { background: var(--accent); color: #000; }
+.btn-danger { padding: 10px 18px; background: var(--danger); color: #fff; border: none; border-radius: var(--radius-sm); cursor: pointer; font-weight: 600; }
+.btn-danger:hover:not(:disabled) { background: var(--danger-strong); }
+.btn-secondary { padding: 10px 18px; background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; font-weight: 600; }
+.btn-secondary:hover:not(:disabled) { background: var(--page); }
+
+/* A flex box so the input still stretches to the height of its row like a bare input would. */
+.suggest { position: relative; display: flex; }
+.search-bar .suggest { flex: 1; min-width: 200px; }
+.suggest-list { position: absolute; top: calc(100% + 4px); left: 0; min-width: 100%; margin: 0; padding: 4px 0; list-style: none; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--shadow-md); z-index: 150; }
+.suggest-option { padding: 8px 12px; cursor: pointer; white-space: nowrap; }
+.suggest-option:hover { background: var(--page); }
+.suggest-option.active { background: var(--accent); color: #000; }
 
 .product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--space); margin: var(--space) 0; }
 .product-card { background: var(--surface); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm); transition: transform .15s, box-shadow .15s; display: flex; flex-direction: column; }
@@ -80,6 +97,9 @@ nav { display: flex; gap: 6px; flex: 1; flex-wrap: wrap; }
 .search-filters input { padding: 10px; border: 1px solid #ccc; border-radius: var(--radius-sm); }
 .search-filters button { padding: 10px 18px; background: var(--ink); color: #fff; border: none; border-radius: var(--radius-sm); cursor: pointer; font-weight: 600; }
 .search-filters button:hover { background: var(--accent); color: #000; }
+.pagination { display: flex; align-items: center; justify-content: center; gap: 12px; margin: var(--space) 0; }
+.pagination button { padding: 8px 16px; background: var(--ink); color: #fff; border: none; border-radius: var(--radius-sm); cursor: pointer; }
+.pagination button:hover:not(:disabled) { background: var(--accent); color: #000; }
 
 .table-scroll { overflow-x: auto; }
 .cart-table { width: 100%; border-collapse: collapse; margin: var(--space) 0; background: var(--surface); }
@@ -106,6 +126,13 @@ nav { display: flex; gap: 6px; flex: 1; flex-wrap: wrap; }
 .status-paid { background: #d4edda; }
 .status-delivered { background: #c3e6cb; }
 .status-cancelled { background: #f8d7da; }
+
+.notice { background: var(--surface); border-left: 4px solid var(--accent); padding: 10px 12px; border-radius: var(--radius-sm); box-shadow: var(--shadow-sm); margin: 12px 0; }
+.order-actions { margin: var(--space) 0; }
+.confirm-panel { margin-top: 12px; max-width: 480px; padding: 12px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); }
+.confirm-panel p { margin: 0 0 12px; font-weight: 600; }
+.confirm-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.checkout-summary { background: var(--surface); border-radius: var(--radius); padding: 12px 16px; margin: 12px 0; box-shadow: var(--shadow-sm); }
 
 .order-timeline { margin: 24px 0; }
 .timeline-item { display: flex; gap: 12px; padding: 8px 0; border-left: 3px solid var(--ink); padding-left: 16px; margin-bottom: 8px; }

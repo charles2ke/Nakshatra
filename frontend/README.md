@@ -47,6 +47,13 @@ npm run build
 - **Motion** is disabled automatically under `prefers-reduced-motion: reduce`.
 - **Responsive**: the header wraps and wide tables are wrapped in `.table-scroll` so they scroll
   horizontally on small screens instead of overflowing the page.
+- **API errors**: `request()` in `src/api/client.ts` throws the server's `{ error }` message, so show
+  `errorMessage(e)` in a `role="alert"` element rather than a generic failure text.
+- **Header badges** come from `BadgeContext` (`useBadges()`). Pages that change the cart or the
+  notification feed call `syncCart(cart)` / `syncUnread(count)` with the server response, or
+  `refreshBadges()` when they have no fresh data; counts also refresh on every navigation.
+- **Type-ahead**: `SuggestInput` is an ARIA combobox over `/api/search/suggest` (arrow keys,
+  `Enter`, `Escape`); reuse it for any keyword field.
 
 ---
 

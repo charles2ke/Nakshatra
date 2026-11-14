@@ -40,8 +40,13 @@ app.MapPost("/api/orders", async (
             return Results.BadRequest(new { error = "Item quantities must be greater than zero." });
         }
 
-        var product = await catalog.GetProductAsync(line.ProductId, ct);
-        if (product is null)
+        var lookup = await catalog.LookupProductAsync(line.ProductId, ct);
+        if (lookup.Status == ProductLookupStatus.Unavailable)
+        {
+            return Results.Json(new { error = "The catalog could not be reached right now. Please try again." }, statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+
+        if (lookup.Product is not { } product)
         {
             return Results.BadRequest(new { error = $"Product '{line.ProductId}' was not found." });
         }
@@ -62,11 +67,40 @@ app.MapPost("/api/orders", async (
     order.History.Add(new OrderStatusChange { Status = OrderStatus.Created, Note = "Order created." });
     order.History.Add(new OrderStatusChange { Status = OrderStatus.AwaitingPayment, Note = "Awaiting payment authorization." });
 
-    await repo.UpsertAsync(order, ct);
-
+    // Reserve before persisting so an order is never accepted for stock that does not exist.
+    var reserved = new List<CartItem>();
     foreach (var item in order.Items)
     {
-        await catalog.ReserveStockAsync(item.ProductId, item.Quantity, ct);
+        var reservation = await catalog.ReserveStockAsync(item.ProductId, item.Quantity, ct);
+        if (!reservation.Succeeded)
+        {
+            await catalog.ReleaseStockAsync(reserved);
+            return reservation.Status switch
+            {
+                StockReservationStatus.InsufficientStock => Results.Conflict(new
+                {
+                    error = reservation.Available > 0
+                        ? $"Only {reservation.Available} of '{item.Name}' left in stock."
+                        : $"'{item.Name}' is out of stock.",
+                    productId = item.ProductId,
+                    available = reservation.Available
+                }),
+                StockReservationStatus.ProductNotFound => Results.BadRequest(new { error = $"Product '{item.ProductId}' was not found." }),
+                _ => Results.Json(new { error = "Stock could not be reserved right now. Please try again." }, statusCode: StatusCodes.Status503ServiceUnavailable)
+            };
+        }
+
+        reserved.Add(item);
+    }
+
+    try
+    {
+        await repo.UpsertAsync(order, ct);
+    }
+    catch
+    {
+        await catalog.ReleaseStockAsync(reserved);
+        throw;
     }
 
     await publisher.PublishAsync(Topics.OrdersCreated, order.Id, order, ct);
@@ -94,7 +128,9 @@ app.MapPost("/api/orders/{id}/status", async (
     string id,
     UpdateOrderStatusRequest request,
     IDocumentRepository<Order> repo,
+    IDocumentRepository<OrderCancellationWork> cancellationWorkRepo,
     IEventPublisher publisher,
+    CatalogClient catalog,
     CancellationToken ct) =>
 {
     var order = await repo.GetAsync(id, ct);
@@ -108,14 +144,28 @@ app.MapPost("/api/orders/{id}/status", async (
         return Results.BadRequest(new { error = $"Unknown status '{request.Status}'." });
     }
 
+    if (status == OrderStatus.Cancelled)
+    {
+        var note = string.IsNullOrWhiteSpace(request.Note) ? "Order cancelled." : request.Note;
+        return Results.Ok(await OrderCancellation.CancelAsync(repo, cancellationWorkRepo, publisher, catalog, order, note, ct));
+    }
+
+    if (order.Status == OrderStatus.Cancelled)
+    {
+        return Results.Conflict(new { error = "Cancelled orders cannot change status." });
+    }
+
     var updated = await OrderStatusUpdater.ApplyAsync(repo, publisher, order, status, request.Note ?? string.Empty, ct);
     return Results.Ok(updated);
 });
 
+// Customer and admin cancellation. Repeating the call is harmless: stock is only released once.
 app.MapPost("/api/orders/{id}/cancel", async (
     string id,
     IDocumentRepository<Order> repo,
+    IDocumentRepository<OrderCancellationWork> cancellationWorkRepo,
     IEventPublisher publisher,
+    CatalogClient catalog,
     CancellationToken ct) =>
 {
     var order = await repo.GetAsync(id, ct);
@@ -129,7 +179,7 @@ app.MapPost("/api/orders/{id}/cancel", async (
         return Results.Conflict(new { error = "Shipped orders cannot be cancelled." });
     }
 
-    var updated = await OrderStatusUpdater.ApplyAsync(repo, publisher, order, OrderStatus.Cancelled, "Cancelled by user.", ct);
+    var updated = await OrderCancellation.CancelAsync(repo, cancellationWorkRepo, publisher, catalog, order, "Cancelled by user.", ct);
     return Results.Ok(updated);
 });
 

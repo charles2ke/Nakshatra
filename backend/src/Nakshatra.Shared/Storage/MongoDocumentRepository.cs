@@ -38,6 +38,24 @@ public class MongoDocumentRepository<T> : IDocumentRepository<T> where T : class
         return entity;
     }
 
+    public async Task<bool> TryCreateAsync(T entity, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(entity.Id))
+        {
+            entity.Id = Guid.NewGuid().ToString("N");
+        }
+
+        try
+        {
+            await _collection.InsertOneAsync(entity, cancellationToken: ct);
+            return true;
+        }
+        catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
+        {
+            return false;
+        }
+    }
+
     public async Task<bool> DeleteAsync(string id, CancellationToken ct = default)
     {
         var result = await _collection.DeleteOneAsync(x => x.Id == id, ct);

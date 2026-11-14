@@ -116,13 +116,15 @@ public class ServiceEndpointTests
     [Fact]
     public async Task Payments_capture_a_valid_card_and_never_echo_the_pan()
     {
-        using var client = CreateClient<Nakshatra.Payment.Service.ServiceMarker>();
+        var order = TestHosts.AwaitingPayment(42.5m);
+        using var factory = TestHosts.PaymentServiceFor(order);
+        using var client = factory.CreateClient();
 
         var response = await client.PostAsJsonAsync("/api/payments", new
         {
-            orderId = "order-test",
-            userId = "user-customer",
-            amount = 42.5m,
+            orderId = order.Id,
+            userId = order.UserId,
+            amount = order.Total,
             currency = "USD",
             method = "Card",
             cardNumber = "4242424242424242",
@@ -156,14 +158,15 @@ public class ServiceEndpointTests
     [Fact]
     public async Task Payments_refund_rejects_a_provider_mismatch()
     {
-        using var factory = new WebApplicationFactory<Nakshatra.Payment.Service.ServiceMarker>();
+        var order = TestHosts.AwaitingPayment(10m);
+        using var factory = TestHosts.PaymentServiceFor(order);
         using var client = factory.CreateClient();
 
         var created = await client.PostAsJsonAsync("/api/payments", new
         {
-            orderId = "order-mismatch",
-            userId = "user-customer",
-            amount = 10m,
+            orderId = order.Id,
+            userId = order.UserId,
+            amount = order.Total,
             currency = "USD",
             method = "Card",
             cardNumber = "4242424242424242",
@@ -185,13 +188,15 @@ public class ServiceEndpointTests
     [Fact]
     public async Task Payments_refund_succeeds_when_the_provider_matches()
     {
-        using var client = CreateClient<Nakshatra.Payment.Service.ServiceMarker>();
+        var order = TestHosts.AwaitingPayment(10m);
+        using var factory = TestHosts.PaymentServiceFor(order);
+        using var client = factory.CreateClient();
 
         var created = await client.PostAsJsonAsync("/api/payments", new
         {
-            orderId = "order-matching-provider",
-            userId = "user-customer",
-            amount = 10m,
+            orderId = order.Id,
+            userId = order.UserId,
+            amount = order.Total,
             currency = "USD",
             method = "Card",
             cardNumber = "4242424242424242",
@@ -209,14 +214,15 @@ public class ServiceEndpointTests
     [Fact]
     public async Task Payments_refund_succeeds_when_no_provider_was_recorded()
     {
-        using var factory = new WebApplicationFactory<Nakshatra.Payment.Service.ServiceMarker>();
+        var order = TestHosts.AwaitingPayment(10m);
+        using var factory = TestHosts.PaymentServiceFor(order);
         using var client = factory.CreateClient();
 
         var created = await client.PostAsJsonAsync("/api/payments", new
         {
-            orderId = "order-no-provider",
-            userId = "user-customer",
-            amount = 10m,
+            orderId = order.Id,
+            userId = order.UserId,
+            amount = order.Total,
             currency = "USD",
             method = "Card",
             cardNumber = "4242424242424242",

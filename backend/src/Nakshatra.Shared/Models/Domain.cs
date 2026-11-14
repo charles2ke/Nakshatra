@@ -100,6 +100,11 @@ public class Order : IEntity
     public string ShippingAddress { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public List<OrderStatusChange> History { get; set; } = new();
+
+    /// <summary>True once the goods have left the warehouse, after which cancelling must not restock them.</summary>
+    public bool HasShipped() =>
+        Status is OrderStatus.Shipped or OrderStatus.Delivered
+        || History.Any(h => h.Status is OrderStatus.Shipped or OrderStatus.Delivered);
 }
 
 public enum ShipmentStatus
@@ -107,7 +112,9 @@ public enum ShipmentStatus
     Pending,
     Packed,
     Shipped,
-    Delivered
+    Delivered,
+    /// <summary>The order was cancelled before the shipment left the warehouse.</summary>
+    Cancelled
 }
 
 public class Shipment : IEntity

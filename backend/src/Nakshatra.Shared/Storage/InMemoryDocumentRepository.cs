@@ -39,6 +39,16 @@ public class InMemoryDocumentRepository<T> : IDocumentRepository<T> where T : cl
         return Task.FromResult(entity);
     }
 
+    public Task<bool> TryCreateAsync(T entity, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(entity.Id))
+        {
+            entity.Id = Guid.NewGuid().ToString("N");
+        }
+
+        return Task.FromResult(_items.TryAdd(entity.Id, entity));
+    }
+
     public Task<bool> DeleteAsync(string id, CancellationToken ct = default)
         => Task.FromResult(_items.TryRemove(id, out _));
 }

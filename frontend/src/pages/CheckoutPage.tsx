@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { getCart, createOrder, createPayment } from '../api/client';
-import type { Cart, PaymentMethod } from '../api/client';
+import { Link, useNavigate } from 'react-router-dom';
+import { getCart, createOrder, createPayment, errorMessage } from '../api/client';
+import type { Cart, Order, PaymentMethod } from '../api/client';
 import { usePersona } from '../context/PersonaContext';
+import { useBadges } from '../context/BadgeContext';
 import { useLocale } from '../i18n/LocaleContext';
 
 export default function CheckoutPage() {
   const { currentUser } = usePersona();
   const { t, formatCurrency } = useLocale();
+  const { refreshBadges } = useBadges();
   const navigate = useNavigate();
   const [cart, setCart] = useState<Cart | null>(null);
   const [address, setAddress] = useState('');
@@ -18,8 +20,8 @@ export default function CheckoutPage() {
   const [cvv, setCvv] = useState('');
   const [upiId, setUpiId] = useState('');
   const [error, setError] = useState('');
-  const [step, setStep] = useState<'address'|'payment'>('address');
-  const [orderId, setOrderId] = useState('');
+  // Once placed, the order (not the cart) is what gets paid.
+  const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -28,50 +30,53 @@ export default function CheckoutPage() {
 
   async function handlePlaceOrder() {
     if (!currentUser || !cart) return;
+    setError('');
     setLoading(true);
     try {
-      const order = await createOrder({
+      const placed = await createOrder({
         userId: currentUser.id,
         items: cart.items.map(i => ({ productId: i.productId, quantity: i.quantity })),
         shippingAddress: address,
       });
-      setOrderId(order.id);
-      setStep('payment');
-    } catch (e) { setError(String(e)); }
+      setOrder(placed);
+      // Placing the order removes its items from the cart on the server.
+      refreshBadges();
+    } catch (e) { setError(errorMessage(e)); }
     setLoading(false);
   }
 
   async function handlePay() {
-    if (!currentUser || !cart) return;
+    if (!currentUser || !order) return;
+    setError('');
     setLoading(true);
     try {
       await createPayment({
-        orderId,
+        orderId: order.id,
         userId: currentUser.id,
-        amount: cart.subtotal,
-        currency: 'INR',
+        amount: order.total,
+        currency: order.currency,
         method,
         cardNumber: method === 'Card' ? cardNumber : undefined,
         cardHolder: method === 'Card' ? cardHolder : undefined,
         expiry: method === 'Card' ? expiry : undefined,
         cvv: method === 'Card' ? cvv : undefined,
       });
-      navigate(`/orders/${orderId}`);
-    } catch (e) { setError(String(e)); }
+      navigate(`/orders/${order.id}`);
+    } catch (e) { setError(errorMessage(e)); }
     setLoading(false);
   }
 
   if (!currentUser) return <div>{t('checkout.noUser')}</div>;
-  if (!cart || cart.items.length === 0) return (
-    <div data-testid="checkout-empty">{t('checkout.cartEmpty')} <a href="/cart">{t('checkout.goToCart')}</a></div>
+  if (!order && (!cart || cart.items.length === 0)) return (
+    <div data-testid="checkout-empty">{t('checkout.cartEmpty')} <Link to="/cart" data-testid="checkout-go-to-cart">{t('checkout.goToCart')}</Link></div>
   );
 
   return (
     <div data-testid="checkout-page">
       <h1>{t('checkout.title')}</h1>
-      {error && <div className="error" data-testid="checkout-error">{error}</div>}
+      {error && <div className="error" role="alert" data-testid="checkout-error">{error}</div>}
 
-      {step === 'address' && (
+      {!order && cart && (
         <div data-testid="checkout-address-step">
           <h2>{t('checkout.shippingTitle')}</h2>
           <textarea data-testid="checkout-address" value={address} onChange={e => setAddress(e.target.value)} placeholder={t('checkout.addressPlaceholder')} rows={3} />
@@ -82,9 +87,14 @@ export default function CheckoutPage() {
         </div>
       )}
 
-      {step === 'payment' && (
+      {order && (
         <div data-testid="checkout-payment-step">
           <h2>{t('checkout.paymentTitle')}</h2>
+          <div className="checkout-summary" data-testid="checkout-summary">
+            <div>{t('checkout.subtotal')}: {formatCurrency(order.subtotal, order.currency)}</div>
+            <div>{t('checkout.tax')}: {formatCurrency(order.tax, order.currency)}</div>
+            <div>{t('checkout.total')}: <strong data-testid="checkout-order-total">{formatCurrency(order.total, order.currency)}</strong></div>
+          </div>
           <select data-testid="payment-method" value={method} onChange={e => setMethod(e.target.value as PaymentMethod)}>
             <option value="Card">{t('checkout.method.card')}</option>
             <option value="UPI">{t('checkout.method.upi')}</option>
