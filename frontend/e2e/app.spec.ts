@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { mockAllApis, injectCustomerPersona, injectAdminPersona, injectFulfillmentPersona, setPersonaAndReload, CART, ORDER, PRODUCTS, SHIPMENTS } from './helpers';
+import { mockAllApis, injectCustomerPersona, injectAdminPersona, injectFulfillmentPersona, setPersonaAndReload, CART, NOTIFICATIONS, ORDER, PRODUCTS, SHIPMENTS } from './helpers';
 import path from 'path';
 
 const ss = (name: string) => path.join('e2e', 'screenshots', `${name}.png`);
@@ -216,33 +216,80 @@ test('notifications page lists the feed and marks one read', async ({ page }) =>
   await page.screenshot({ path: ss('notifications-page') });
 });
 
-test('notifications from a previous persona cannot overwrite the active feed or badge', async ({ page }) => {
+test('late notification loads do not overwrite the active persona', async ({ page }) => {
   await mockAllApis(page);
   await injectCustomerPersona(page);
   let releaseCustomerResponse!: () => void;
-  const customerResponsePaused = new Promise<void>(resolve => { releaseCustomerResponse = resolve; });
-  let signalCustomerRequest!: () => void;
-  const customerRequestStarted = new Promise<void>(resolve => { signalCustomerRequest = resolve; });
+  let finishCustomerResponse!: () => void;
+  let announceCustomerRequest!: () => void;
+  const waitForCustomerResponse = new Promise<void>(resolve => { releaseCustomerResponse = resolve; });
+  const customerResponseFinished = new Promise<void>(resolve => { finishCustomerResponse = resolve; });
+  const customerRequestArrived = new Promise<void>(resolve => { announceCustomerRequest = resolve; });
+
   await page.route(url =>
-    url.pathname === '/api/notifications'
-      && url.searchParams.get('userId') === 'u1'
-      && url.searchParams.get('unreadOnly') === 'false',
+    url.pathname === '/api/notifications' &&
+    url.searchParams.get('userId') === 'u1' &&
+    url.searchParams.get('unreadOnly') === 'false',
   async route => {
-    signalCustomerRequest();
-    await customerResponsePaused;
-    await route.fulfill({ json: { items: [], unreadCount: 99 } });
+    announceCustomerRequest();
+    await waitForCustomerResponse;
+    await route.fulfill({ json: { unreadCount: 2, items: NOTIFICATIONS.items } });
+    finishCustomerResponse();
   });
-  await page.route(url => url.pathname === '/api/notifications' && url.searchParams.get('userId') === 'u3',
-    route => route.fulfill({ json: { items: [], unreadCount: 7 } }));
+  await page.route(url => url.pathname === '/api/notifications' && url.searchParams.get('userId') === 'u3', route =>
+    route.fulfill({ json: { unreadCount: 7, items: [] } }));
 
   await page.goto('/notifications');
-  await customerRequestStarted;
+  await customerRequestArrived;
   await page.click('[data-testid="persona-switcher-btn"]');
   await page.click('[data-testid="persona-option-u3"]');
   await expect(page.locator('[data-testid="notifications-unread-count"]')).toContainText('7');
+  await expect(page.locator('[data-testid="nav-notifications-badge"]')).toHaveText('7');
+
   releaseCustomerResponse();
+  await customerResponseFinished;
   await expect(page.locator('[data-testid="notifications-unread-count"]')).toContainText('7');
   await expect(page.locator('[data-testid="nav-notifications-badge"]')).toHaveText('7');
+  await page.screenshot({ path: ss('notifications-persona-switch') });
+});
+
+test('mark-all reload does not run for a persona that is no longer active', async ({ page }) => {
+  await mockAllApis(page);
+  await injectCustomerPersona(page);
+  let releaseMarkAll!: () => void;
+  let announceMarkAll!: () => void;
+  let finishMarkAll!: () => void;
+  const waitForMarkAll = new Promise<void>(resolve => { releaseMarkAll = resolve; });
+  const markAllFinished = new Promise<void>(resolve => { finishMarkAll = resolve; });
+  const markAllStarted = new Promise<void>(resolve => { announceMarkAll = resolve; });
+  let customerNotificationLoads = 0;
+
+  await page.route(url => url.pathname === '/api/notifications' && url.searchParams.get('userId') === 'u1', route => {
+    customerNotificationLoads++;
+    return route.fulfill({ json: NOTIFICATIONS });
+  });
+  await page.route('**/api/notifications/read-all', async route => {
+    announceMarkAll();
+    await waitForMarkAll;
+    await route.fulfill({ json: { updated: 3 } });
+    finishMarkAll();
+  });
+  await page.route(url => url.pathname === '/api/notifications' && url.searchParams.get('userId') === 'u3', route =>
+    route.fulfill({ json: { unreadCount: 7, items: [] } }));
+
+  await page.goto('/notifications');
+  await page.click('[data-testid="notifications-read-all"]');
+  await markAllStarted;
+  const customerLoadsBeforeSwitch = customerNotificationLoads;
+  await page.click('[data-testid="persona-switcher-btn"]');
+  await page.click('[data-testid="persona-option-u3"]');
+  await expect(page.locator('[data-testid="notifications-unread-count"]')).toContainText('7');
+
+  releaseMarkAll();
+  await markAllFinished;
+  await expect(page.locator('[data-testid="notifications-unread-count"]')).toContainText('7');
+  expect(customerNotificationLoads).toBe(customerLoadsBeforeSwitch);
+  await page.screenshot({ path: ss('notifications-mark-all-persona-switch') });
 });
 
 test('order detail shows the supply chain trace', async ({ page }) => {
@@ -346,6 +393,27 @@ test('search filters apply when pressing Enter', async ({ page }) => {
   await page.screenshot({ path: ss('search-enter-filter') });
 });
 
+test('failed search page requests clear the previous page results', async ({ page }) => {
+  await mockAllApis(page);
+  await injectCustomerPersona(page);
+  await page.route(url => url.pathname === '/api/search', route => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get('page') === '2') {
+      return route.fulfill({ status: 503, json: { error: 'Search unavailable.' } });
+    }
+    return route.fulfill({ json: { items: PRODUCTS, total: 24, page: 1, pageSize: 12 } });
+  });
+
+  await page.goto('/search');
+  await expect(page.locator('[data-testid^="product-card-"]')).toHaveCount(2);
+  await page.click('[data-testid="search-next"]');
+  await expect(page).toHaveURL(/page=2/);
+  await expect(page.locator('[data-testid="search-loading"]')).toHaveCount(0);
+  await expect(page.locator('[data-testid^="product-card-"]')).toHaveCount(0);
+  await expect(page.locator('[data-testid="search-total"]')).toHaveCount(0);
+  await page.screenshot({ path: ss('search-failed-page-cleared') });
+});
+
 test('header shows cart and unread notification counts', async ({ page }) => {
   await mockAllApis(page);
   await injectCustomerPersona(page);
@@ -444,24 +512,6 @@ test('search results can be paged and filters return to the first page', async (
   await expect(page).toHaveURL(/category=Jewelry/);
   await expect(page).not.toHaveURL(/page=/);
   await expect(page.locator('[data-testid="search-page-indicator"]')).toHaveText('Page 1 of 3');
-});
-
-test('failed search pagination does not show results from the previous page', async ({ page }) => {
-  await mockAllApis(page);
-  await injectCustomerPersona(page);
-  await page.route(/\/api\/search(\?|$)/, route => {
-    const requestedPage = new URL(route.request().url()).searchParams.get('page');
-    if (requestedPage === '2') return route.abort();
-    return route.fulfill({ json: { items: PRODUCTS, total: 30, page: 1, pageSize: 12 } });
-  });
-
-  await page.goto('/search');
-  await expect(page.locator('[data-testid="product-card-p1"]')).toBeVisible();
-  await page.click('[data-testid="search-next"]');
-  await expect(page).toHaveURL(/page=2/);
-  await expect(page.locator('[data-testid="search-loading"]')).toHaveCount(0);
-  await expect(page.locator('[data-testid="product-card-p1"]')).toHaveCount(0);
-  await expect(page.locator('[data-testid="search-total"]')).toHaveCount(0);
 });
 
 test('search suggestions can be chosen with the keyboard', async ({ page }) => {

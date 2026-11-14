@@ -56,7 +56,7 @@ public class CatalogClient
     {
         try
         {
-            var response = await _httpClient.GetAsync($"/api/products/{id}", ct);
+            using var response = await _httpClient.GetAsync($"/api/products/{Uri.EscapeDataString(id)}", ct);
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
                 return new ProductLookupResult(ProductLookupStatus.NotFound);

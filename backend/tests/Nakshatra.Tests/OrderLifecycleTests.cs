@@ -3,7 +3,6 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
-using Nakshatra.Inventory.Service;
 using Nakshatra.Payment.Service;
 using Nakshatra.Shared;
 using Nakshatra.Shared.Http;
@@ -12,6 +11,8 @@ using Nakshatra.Shared.Models;
 using Nakshatra.Shared.Storage;
 using CatalogService = Nakshatra.Catalog.Service.ServiceMarker;
 using CartEntity = Nakshatra.Shared.Models.Cart;
+using InventoryItem = Nakshatra.Inventory.Service.InventoryItem;
+using InventoryService = Nakshatra.Inventory.Service.ServiceMarker;
 using OrderEntity = Nakshatra.Shared.Models.Order;
 using OrderService = Nakshatra.Order.Service.ServiceMarker;
 using PaymentEntity = Nakshatra.Shared.Models.Payment;
@@ -50,6 +51,24 @@ public class OrderLifecycleTests
         Assert.Empty((await orderClient.GetFromJsonAsync<List<OrderEntity>>($"/api/orders/user/{userId}", ServiceDefaults.JsonOptions))!);
     }
 
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound, HttpStatusCode.BadRequest)]
+    [InlineData(HttpStatusCode.ServiceUnavailable, HttpStatusCode.ServiceUnavailable)]
+    public async Task Catalog_product_lookup_distinguishes_missing_products_from_outages(HttpStatusCode catalogStatus, HttpStatusCode expected)
+    {
+        using var orders = TestHosts.Create<OrderService>(services =>
+            services.Route<CatalogClient>(() => new StubHttpMessageHandler(catalogStatus, "{}")));
+        using var client = orders.CreateClient();
+
+        var response = await client.PostAsJsonAsync("/api/orders", new
+        {
+            userId = $"user-{Guid.NewGuid():N}",
+            items = new[] { new { productId = "product-unavailable", quantity = 1 } }
+        });
+
+        Assert.Equal(expected, response.StatusCode);
+    }
+
     [Fact]
     public async Task Cancelling_returns_stock_once_and_is_final()
     {
@@ -70,25 +89,6 @@ public class OrderLifecycleTests
         Assert.Equal(HttpStatusCode.Conflict, reopened.StatusCode);
         Assert.Equal(5, (await GetProductAsync(catalogClient, product.Id)).Stock);
         Assert.Equal(OrderStatus.Cancelled, (await GetOrderAsync(orderClient, order.Id)).Status);
-    }
-
-    [Theory]
-    [InlineData(HttpStatusCode.NotFound, HttpStatusCode.BadRequest)]
-    [InlineData(HttpStatusCode.InternalServerError, HttpStatusCode.ServiceUnavailable)]
-    public async Task Order_product_lookup_distinguishes_missing_products_from_catalog_outages(
-        HttpStatusCode catalogStatus, HttpStatusCode expectedStatus)
-    {
-        using var orders = TestHosts.Create<OrderService>(services =>
-            services.Route<CatalogClient>(() => new StubHttpMessageHandler(catalogStatus, "{}")));
-        using var client = orders.CreateClient();
-
-        var response = await client.PostAsJsonAsync("/api/orders", new
-        {
-            userId = $"user-{Guid.NewGuid():N}",
-            items = new[] { new { productId = "unknown-product", quantity = 1 } }
-        });
-
-        Assert.Equal(expectedStatus, response.StatusCode);
     }
 
     [Fact]
@@ -312,7 +312,7 @@ public class OrderLifecycleTests
             Status = OrderStatus.Cancelled,
             Items = { new CartItem { ProductId = productId, Quantity = 5 } }
         };
-        using var inventory = TestHosts.Create<Nakshatra.Inventory.Service.ServiceMarker>();
+        using var inventory = TestHosts.Create<InventoryService>();
         var repository = inventory.Services.GetRequiredService<IDocumentRepository<InventoryItem>>();
         await repository.UpsertAsync(new InventoryItem { Id = productId, ProductId = productId, OnHand = 3 });
         var events = inventory.Services.GetRequiredService<IEventPublisher>();
@@ -331,6 +331,7 @@ public class OrderLifecycleTests
         var item = await repository.GetAsync(productId);
         Assert.Equal(3, item!.OnHand);
         Assert.Empty(item.SalesHistory);
+        Assert.True(Assert.Single(item.OrderSales).Cancelled);
     }
 
     [Fact]

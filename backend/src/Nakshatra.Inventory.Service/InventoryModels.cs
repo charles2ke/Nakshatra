@@ -26,26 +26,18 @@ public class InventoryItem : IEntity
     /// <summary>Annual holding cost per unit, used by the EOQ calculation.</summary>
     public decimal HoldingCostPerUnitPerYear { get; set; } = 6m;
     public List<SalesDataPoint> SalesHistory { get; set; } = new();
+    public List<InventoryOrderSale> OrderSales { get; set; } = new();
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
     public int Available => Math.Max(OnHand - Reserved, 0);
 }
 
-public class InventoryOrderState : IEntity
+public class InventoryOrderSale
 {
-    public string Id { get; set; } = string.Empty;
+    public string OrderId { get; set; } = string.Empty;
+    public int Quantity { get; set; }
+    public int StockDecrement { get; set; }
     public bool Cancelled { get; set; }
-    public bool SaleRecorded { get; set; }
-    public List<InventoryOrderLine> Lines { get; set; } = new();
-}
-
-public class InventoryOrderLine
-{
-    public string ProductId { get; set; } = string.Empty;
-    public DateOnly SaleDate { get; set; }
-    public int StockDecremented { get; set; }
-    public int DemandQuantity { get; set; }
-    public bool Reversed { get; set; }
 }
 
 public record ForecastPoint(DateOnly Date, double ForecastUnits);
