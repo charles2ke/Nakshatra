@@ -40,8 +40,13 @@ app.MapPost("/api/orders", async (
             return Results.BadRequest(new { error = "Item quantities must be greater than zero." });
         }
 
-        var product = await catalog.GetProductAsync(line.ProductId, ct);
-        if (product is null)
+        var lookup = await catalog.LookupProductAsync(line.ProductId, ct);
+        if (lookup.Status == ProductLookupStatus.Unavailable)
+        {
+            return Results.Json(new { error = "The catalog could not be reached right now. Please try again." }, statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+
+        if (lookup.Product is not { } product)
         {
             return Results.BadRequest(new { error = $"Product '{line.ProductId}' was not found." });
         }

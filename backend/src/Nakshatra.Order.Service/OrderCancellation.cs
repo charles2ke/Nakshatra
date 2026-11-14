@@ -18,17 +18,37 @@ public static class OrderCancellation
         string note,
         CancellationToken ct = default)
     {
-        if (order.Status == OrderStatus.Cancelled)
+        if (order.Status != OrderStatus.Cancelled)
         {
-            return order;
+            order.Status = OrderStatus.Cancelled;
+            order.History.Add(new OrderStatusChange { Status = OrderStatus.Cancelled, Note = note });
+            order.CancellationStatusChangedPublished = false;
+            order.CancellationStockReleasedProductIds = new List<string>();
+            await repo.UpsertAsync(order, ct);
         }
 
-        var restock = !order.HasShipped();
-        await OrderStatusUpdater.ApplyAsync(repo, publisher, order, OrderStatus.Cancelled, note, ct);
-
-        if (restock)
+        if (order.CancellationStockReleasedProductIds is { } releasedProductIds && !order.HasShipped())
         {
-            await catalog.ReleaseStockAsync(order.Items);
+            foreach (var lines in order.Items.GroupBy(item => item.ProductId))
+            {
+                if (releasedProductIds.Contains(lines.Key))
+                {
+                    continue;
+                }
+
+                if (await catalog.ReleaseStockAsync(lines.Key, lines.Sum(item => item.Quantity)))
+                {
+                    releasedProductIds.Add(lines.Key);
+                    await repo.UpsertAsync(order, ct);
+                }
+            }
+        }
+
+        if (order.CancellationStatusChangedPublished != true)
+        {
+            await publisher.PublishAsync(Topics.OrdersStatusChanged, order.Id, order, ct);
+            order.CancellationStatusChangedPublished = true;
+            await repo.UpsertAsync(order, ct);
         }
 
         return order;

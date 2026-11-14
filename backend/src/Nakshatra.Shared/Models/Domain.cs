@@ -100,6 +100,8 @@ public class Order : IEntity
     public string ShippingAddress { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public List<OrderStatusChange> History { get; set; } = new();
+    public bool? CancellationStatusChangedPublished { get; set; }
+    public List<string>? CancellationStockReleasedProductIds { get; set; }
 
     /// <summary>True once the goods have left the warehouse, after which cancelling must not restock them.</summary>
     public bool HasShipped() =>

@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Nakshatra.Shared;
 using Nakshatra.Shared.Http;
 using Nakshatra.Shared.Messaging;
@@ -10,6 +11,8 @@ using Nakshatra.Shared.Models;
 using Nakshatra.Shared.Storage;
 using CatalogService = Nakshatra.Catalog.Service.ServiceMarker;
 using CartEntity = Nakshatra.Shared.Models.Cart;
+using InventoryItem = Nakshatra.Inventory.Service.InventoryItem;
+using InventoryService = Nakshatra.Inventory.Service.ServiceMarker;
 using OrderEntity = Nakshatra.Shared.Models.Order;
 using OrderService = Nakshatra.Order.Service.ServiceMarker;
 using PaymentEntity = Nakshatra.Shared.Models.Payment;
@@ -48,6 +51,24 @@ public class OrderLifecycleTests
         Assert.Empty((await orderClient.GetFromJsonAsync<List<OrderEntity>>($"/api/orders/user/{userId}", ServiceDefaults.JsonOptions))!);
     }
 
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound, HttpStatusCode.BadRequest)]
+    [InlineData(HttpStatusCode.ServiceUnavailable, HttpStatusCode.ServiceUnavailable)]
+    public async Task Catalog_product_lookup_distinguishes_missing_products_from_outages(HttpStatusCode catalogStatus, HttpStatusCode expected)
+    {
+        using var orders = TestHosts.Create<OrderService>(services =>
+            services.Route<CatalogClient>(() => new StubHttpMessageHandler(catalogStatus, "{}")));
+        using var client = orders.CreateClient();
+
+        var response = await client.PostAsJsonAsync("/api/orders", new
+        {
+            userId = $"user-{Guid.NewGuid():N}",
+            items = new[] { new { productId = "product-unavailable", quantity = 1 } }
+        });
+
+        Assert.Equal(expected, response.StatusCode);
+    }
+
     [Fact]
     public async Task Cancelling_returns_stock_once_and_is_final()
     {
@@ -68,6 +89,36 @@ public class OrderLifecycleTests
         Assert.Equal(HttpStatusCode.Conflict, reopened.StatusCode);
         Assert.Equal(5, (await GetProductAsync(catalogClient, product.Id)).Stock);
         Assert.Equal(OrderStatus.Cancelled, (await GetOrderAsync(orderClient, order.Id)).Status);
+    }
+
+    [Fact]
+    public async Task Cancellation_publication_failure_can_be_retried_without_releasing_stock_twice()
+    {
+        var publisher = new FailOncePublisher();
+        var released = 0;
+        using var orders = TestHosts.Create<OrderService>(services =>
+        {
+            services.RemoveAll<IEventPublisher>();
+            services.AddSingleton<IEventPublisher>(publisher);
+            services.Route<CatalogClient>(() => new ReleaseCountingHandler(() => released++));
+        });
+        using var client = orders.CreateClient();
+        var order = TestHosts.AwaitingPayment(10m);
+        order.Items.Add(new CartItem { ProductId = "product-release-retry", Quantity = 2 });
+        await orders.Services.GetRequiredService<IDocumentRepository<OrderEntity>>().UpsertAsync(order);
+
+        var failedAttempt = await client.PostAsync($"/api/orders/{order.Id}/cancel", null);
+        var retry = await client.PostAsync($"/api/orders/{order.Id}/cancel", null);
+        var duplicate = await client.PostAsync($"/api/orders/{order.Id}/cancel", null);
+        var saved = await orders.Services.GetRequiredService<IDocumentRepository<OrderEntity>>().GetAsync(order.Id);
+
+        Assert.Equal(HttpStatusCode.InternalServerError, failedAttempt.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, retry.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, duplicate.StatusCode);
+        Assert.Equal(1, released);
+        Assert.Equal(2, publisher.PublishCount);
+        Assert.True(saved!.CancellationStatusChangedPublished);
+        Assert.Equal(new[] { "product-release-retry" }, saved.CancellationStockReleasedProductIds);
     }
 
     [Fact]
@@ -218,6 +269,39 @@ public class OrderLifecycleTests
         Assert.Equal(ShipmentStatus.Cancelled, shipment!.Status);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Inventory_reconciles_cancelled_orders_in_either_event_order(bool cancellationFirst)
+    {
+        var productId = $"product-{Guid.NewGuid():N}";
+        var order = TestHosts.AwaitingPayment(50m);
+        order.Items.Add(new CartItem { ProductId = productId, Quantity = 5 });
+        using var inventory = TestHosts.Create<InventoryService>();
+        var repo = inventory.Services.GetRequiredService<IDocumentRepository<InventoryItem>>();
+        await repo.UpsertAsync(new InventoryItem { Id = productId, ProductId = productId, OnHand = 3 });
+        var events = inventory.Services.GetRequiredService<IEventPublisher>();
+
+        if (cancellationFirst)
+        {
+            order.Status = OrderStatus.Cancelled;
+            await events.PublishAsync(Topics.OrdersStatusChanged, order.Id, order);
+            order.Status = OrderStatus.AwaitingPayment;
+            await events.PublishAsync(Topics.OrdersCreated, order.Id, order);
+        }
+        else
+        {
+            await events.PublishAsync(Topics.OrdersCreated, order.Id, order);
+            order.Status = OrderStatus.Cancelled;
+            await events.PublishAsync(Topics.OrdersStatusChanged, order.Id, order);
+        }
+
+        var item = await repo.GetAsync(productId);
+        Assert.Equal(3, item!.OnHand);
+        Assert.Empty(item.SalesHistory);
+        Assert.True(Assert.Single(item.OrderSales).Cancelled);
+    }
+
     [Fact]
     public async Task Placing_an_order_removes_the_ordered_items_from_the_cart()
     {
@@ -287,6 +371,33 @@ public class OrderLifecycleTests
         });
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         return (await response.Content.ReadFromJsonAsync<OrderEntity>(ServiceDefaults.JsonOptions))!;
+    }
+
+    private sealed class FailOncePublisher : IEventPublisher
+    {
+        public int PublishCount { get; private set; }
+
+        public Task PublishAsync<T>(string topic, string key, T payload, CancellationToken ct = default)
+        {
+            PublishCount++;
+            return PublishCount == 1 ? Task.FromException(new InvalidOperationException("Temporary publish failure.")) : Task.CompletedTask;
+        }
+    }
+
+    private sealed class ReleaseCountingHandler(Action onRelease) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.RequestUri?.AbsolutePath.EndsWith("/release", StringComparison.Ordinal) == true)
+            {
+                onRelease();
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{}")
+            });
+        }
     }
 
     private sealed record CardPaymentRequest(
