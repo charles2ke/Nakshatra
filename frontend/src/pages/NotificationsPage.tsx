@@ -1,47 +1,69 @@
-import { useState, useEffect, useCallback } from 'react';
-import { getNotifications, markNotificationRead, markAllNotificationsRead } from '../api/client';
+import { useState, useEffect, useCallback, useLayoutEffect, useRef } from 'react';
+import { getNotifications, markNotificationRead, markAllNotificationsRead, errorMessage } from '../api/client';
 import type { AppNotification } from '../api/client';
 import { usePersona } from '../context/PersonaContext';
+import { useBadges } from '../context/BadgeContext';
 import { useLocale } from '../i18n/LocaleContext';
 
 export default function NotificationsPage() {
   const { t, formatDate } = useLocale();
   const { currentUser } = usePersona();
+  const { refreshBadges, syncUnread } = useBadges();
   const [items, setItems] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const activeContext = useRef('');
+  const requestVersion = useRef(0);
+  const contextKey = `${currentUser?.id ?? ''}:${currentUser?.persona ?? ''}:${unreadOnly}`;
+  useLayoutEffect(() => { activeContext.current = contextKey; }, [contextKey]);
 
   const load = useCallback(async () => {
     if (!currentUser) return;
+    const context = `${currentUser.id}:${currentUser.persona}:${unreadOnly}`;
+    const version = ++requestVersion.current;
     setLoading(true);
     try {
       const feed = await getNotifications({ userId: currentUser.id, audience: currentUser.persona, unreadOnly });
+      if (activeContext.current !== context || requestVersion.current !== version) return;
       setItems(feed.items);
       setUnreadCount(feed.unreadCount);
-    } catch (e) { setError(String(e)); }
-    setLoading(false);
-  }, [currentUser, unreadOnly]);
+      syncUnread(feed.unreadCount);
+    } catch (e) {
+      if (activeContext.current === context && requestVersion.current === version) setError(errorMessage(e));
+    } finally {
+      if (activeContext.current === context && requestVersion.current === version) setLoading(false);
+    }
+  }, [currentUser, unreadOnly, syncUnread]);
 
   useEffect(() => { load(); }, [load]);
 
   async function handleRead(id: string) {
+    const context = activeContext.current;
     setError('');
     try {
       const updated = await markNotificationRead(id);
+      if (activeContext.current !== context) return;
       setItems(prev => prev.map(n => n.id === id ? updated : n));
       setUnreadCount(c => Math.max(c - 1, 0));
-    } catch (e) { setError(String(e)); }
+      refreshBadges();
+    } catch (e) {
+      if (activeContext.current === context) setError(errorMessage(e));
+    }
   }
 
   async function handleReadAll() {
     if (!currentUser) return;
+    const context = activeContext.current;
     setError('');
     try {
       await markAllNotificationsRead({ userId: currentUser.id, audience: currentUser.persona });
+      if (activeContext.current !== context) return;
       await load();
-    } catch (e) { setError(String(e)); }
+    } catch (e) {
+      if (activeContext.current === context) setError(errorMessage(e));
+    }
   }
 
   if (!currentUser) return <div data-testid="notifications-no-user">{t('notifications.noUser')}</div>;
@@ -50,7 +72,7 @@ export default function NotificationsPage() {
     <div data-testid="notifications-page">
       <h1>{t('notifications.title')}</h1>
       <div data-testid="notifications-unread-count">{t('notifications.unread', { count: String(unreadCount) })}</div>
-      {error && <div className="error" data-testid="notifications-error">{error}</div>}
+      {error && <div className="error" role="alert" data-testid="notifications-error">{error}</div>}
       <div className="notifications-toolbar">
         <label>
           <input

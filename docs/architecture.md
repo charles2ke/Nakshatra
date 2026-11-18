@@ -143,15 +143,15 @@ Ports shown are the local development ports (`launchSettings.json`, and the gate
 | **Gateway** | Single ingress, CORS, `/api/*` routing to the owning service | `/health`, `/api/**` | — | — |
 | **User** | Users and personas | `/api/users`, `/api/personas`, `/api/users/by-persona/{persona}` | — | — |
 | **Vendor** | Vendor master data | `/api/vendors` | — | — |
-| **Catalog** | Product master data, stock reservation, reviews | `/api/products`, `/api/products/{id}/reserve`, `/api/products/categories`, `/api/products/{id}/reviews` | — | — |
+| **Catalog** | Product master data, stock reservation and release, reviews | `/api/products`, `/api/products/{id}/reserve`, `/api/products/{id}/release`, `/api/products/categories`, `/api/products/{id}/reviews` | — | — |
 | **Search** | Keyword search, filtering, paging and type-ahead over catalog data | `/api/search`, `/api/search/suggest` | — | — |
-| **Cart** | Per-user cart lines | `/api/cart/{userId}` and item add/update/remove | `cart.item-added` | — |
+| **Cart** | Per-user cart lines; ordered lines are removed once the order is placed | `/api/cart/{userId}` and item add/update/remove | `cart.item-added` | `orders.created` |
 | **Recommendation** | Co-purchase graph, "also purchased", basket recommendations | `/api/recommendations/also-purchased/{productId}`, `/api/recommendations/basket` | — | `orders.created` |
-| **Order** | Order creation, pricing (subtotal + tax), status transitions, cancellation | `/api/orders`, `/api/orders/{id}/status`, `/api/orders/{id}/cancel` | `orders.created`, `orders.status-changed` | `payments.completed` |
-| **Payment** | Authorization and refunds through Stripe, or a simulated gateway when no provider is configured | `/api/payments`, `/api/payments/{id}/refund` | `payments.completed` | — |
+| **Order** | Order creation with all-or-nothing stock reservation, pricing (subtotal + tax), status transitions, cancellation (releases stock until the order ships) | `/api/orders`, `/api/orders/{id}/status`, `/api/orders/{id}/cancel` | `orders.created`, `orders.status-changed` | `payments.completed` |
+| **Payment** | Authorization and refunds through Stripe, or a simulated gateway when no provider is configured; payments are checked against the order, and captured payments are refunded when an order is cancelled | `/api/payments`, `/api/payments/{id}/refund` | `payments.completed` | `orders.status-changed` |
 | **Billing** | Invoices derived from orders and payments | `/api/billing/invoices` | — | `orders.created`, `payments.completed` |
-| **Fulfillment** | Shipments and their stage transitions | `/api/fulfillment/shipments`, `.../advance` | — | `orders.created` |
-| **Inventory** | Stock levels, adjustments, replenishment, demand forecasting, reorder suggestions | `/api/inventory`, `.../adjust`, `.../replenish`, `.../forecast`, `/api/inventory/reorder-suggestions` | `inventory.adjusted`, `inventory.low`, `inventory.replenishment-ordered` | `orders.created` |
+| **Fulfillment** | Shipments and their stage transitions; only paid, non-cancelled orders advance | `/api/fulfillment/shipments`, `.../advance` | — | `orders.created`, `orders.status-changed` |
+| **Inventory** | Stock levels, adjustments, replenishment, demand forecasting, reorder suggestions | `/api/inventory`, `.../adjust`, `.../replenish`, `.../forecast`, `/api/inventory/reorder-suggestions` | `inventory.adjusted`, `inventory.low`, `inventory.replenishment-ordered` | `orders.created`, `orders.status-changed` |
 | **SupplyChain** | End-to-end traceability of orders and replenishments | `/api/supplychain/traces`, `/api/supplychain/stages` | `supplychain.event-recorded` | `orders.created`, `orders.status-changed`, `inventory.replenishment-ordered` |
 | **Media** | Uploads, sandboxed storage, background transcoding into renditions | `/api/media`, `/api/media/{id}/renditions/{rendition}` | `media.uploaded`, `media.transcoded` | `media.uploaded` |
 | **Notification** | Per-user notification inbox fed by domain events, delivered over email/SMS/webhooks | `/api/notifications`, `.../read`, `.../read-all` | — | `orders.created`, `orders.status-changed`, `payments.completed`, `supplychain.event-recorded`, `inventory.low`, `inventory.replenishment-ordered`, `media.transcoded` |
@@ -170,8 +170,12 @@ flowchart LR
     ORDER -->|orders.created| REC[Recommendation]
     ORDER -->|orders.created| SC[SupplyChain]
     ORDER -->|orders.created| NOTIF[Notification]
+    ORDER -->|orders.created| CART[Cart]
     ORDER -->|orders.status-changed| SC
     ORDER -->|orders.status-changed| NOTIF
+    ORDER -->|orders.status-changed| FUL
+    ORDER -->|orders.status-changed| INV
+    ORDER -->|orders.status-changed| PAY[Payment]
 
     PAY[Payment] -->|payments.completed| ORDER
     PAY -->|payments.completed| BILL
@@ -231,18 +235,23 @@ sequenceDiagram
     participant F as Fulfillment
     participant B as Billing
     participant I as Inventory
+    participant Ca as Cart
     participant N as Notification
 
     P->>O: POST /api/orders
-    O->>C: validate and price each line
+    O->>C: validate, price and reserve each line
+    Note over O,C: any failure releases the lines already reserved<br/>(409 out of stock, 400 unknown product, 503 catalog unavailable)
     O->>O: subtotal + tax = total
     O->>K: orders.created
     K-->>F: create shipment
     K-->>B: draft invoice
     K-->>I: decrement stock (may emit inventory.low)
+    K-->>Ca: remove the ordered lines from the cart
     K-->>N: "order placed" notification
 
-    P->>Pay: POST /api/payments
+    P->>Pay: POST /api/payments (order total and currency)
+    Pay->>O: GET /api/orders/{id}
+    Note over Pay,O: rejects unknown, cancelled or already-paid orders<br/>and amounts or currencies that differ from the order
     Pay->>Pay: authorize (simulated PSP)
     Pay->>K: payments.completed
     K-->>O: mark order paid, emit orders.status-changed
@@ -250,7 +259,37 @@ sequenceDiagram
     K-->>N: "payment received" notification
 ```
 
-### 6.3 Media upload and transcoding
+### 6.3 Cancellation and refunds
+
+An order can be cancelled until it ships (`Created`, `AwaitingPayment`, `Paid` or `Packed`);
+shipped and delivered orders are rejected with `409`. Cancelling is idempotent, and a cancelled
+order cannot move to any other status. Fulfillment refuses to advance a shipment whose order is
+unpaid or cancelled.
+
+```mermaid
+sequenceDiagram
+    participant P as Portal
+    participant O as Order
+    participant C as Catalog
+    participant K as Kafka
+    participant Pay as Payment
+    participant F as Fulfillment
+    participant I as Inventory
+
+    P->>O: POST /api/orders/{id}/cancel
+    O->>K: orders.status-changed (Cancelled)
+    O->>C: POST /api/products/{id}/release for each line
+    K-->>Pay: refund captured payments
+    Pay->>K: payments.completed (Refunded)
+    K-->>F: cancel the pending or packed shipment
+    K-->>I: reverse the recorded sale
+```
+
+A refund issued directly (`POST /api/payments/{id}/refund`) publishes `payments.completed` with
+status `Refunded`, which cancels the order through the same path. Stock is only returned when the
+order had not shipped.
+
+### 6.4 Media upload and transcoding
 
 ```mermaid
 sequenceDiagram
@@ -373,6 +412,7 @@ the published demo run without any external accounts.
 |----------|-----------|-----------|
 | Gateway owns all `/api/*` routing | The portal has one origin and one CORS policy, and services can move without client changes | The gateway is a shared dependency that must be scaled and monitored carefully |
 | Events for write-side integration | Order placement does not block on fulfillment, billing, inventory or notifications | Downstream state is eventually consistent |
+| Synchronous stock reservation when an order is placed | Customers learn about a stock-out before paying, and a failed line rolls back the others | Reservation is a read-modify-write of the product document, so heavy concurrent demand for one product can still oversell until it becomes an atomic update |
 | HTTP for cross-service reads | Simple, and avoids duplicating product data into search, cart and order | The read path depends on Catalog availability, mitigated by Redis caching |
 | Database per service, no shared collections | Preserves service autonomy and independent schema evolution | Cross-domain queries must be composed by the caller |
 | In-memory fallbacks for Mongo/Redis/Kafka | Fast local development and cheap integration tests without infrastructure | Fallback behaviour is single-process only and must never be used in production |

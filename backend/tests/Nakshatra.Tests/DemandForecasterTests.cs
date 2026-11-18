@@ -105,6 +105,25 @@ public class DemandForecasterTests
     }
 
     [Fact]
+    public void Reversing_a_sale_restocks_and_removes_the_demand()
+    {
+        var item = new InventoryItem { Id = "prod-z", ProductId = "prod-z", OnHand = 10 };
+        var date = new DateOnly(2026, 3, 1);
+        InventoryMath.RecordSale(item, date, 3);
+        InventoryMath.RecordSale(item, date, 2);
+
+        InventoryMath.ReverseSale(item, date, 2);
+
+        Assert.Equal(7, item.OnHand);
+        Assert.Equal(3, Assert.Single(item.SalesHistory).Units);
+
+        InventoryMath.ReverseSale(item, date, 3);
+
+        Assert.Equal(10, item.OnHand);
+        Assert.Empty(item.SalesHistory);
+    }
+
+    [Fact]
     public void Standard_deviation_needs_at_least_two_points()
     {
         Assert.Equal(0, DemandForecaster.StandardDeviation(new List<double> { 4 }));

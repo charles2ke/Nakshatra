@@ -30,12 +30,24 @@ public class OrderStreamConsumer : EventConsumerBackgroundService
         var repo = scopedServices.GetRequiredService<IDocumentRepository<InventoryItem>>();
         var publisher = scopedServices.GetRequiredService<IEventPublisher>();
 
-        foreach (var line in order.Items)
+        foreach (var lines in order.Items.GroupBy(line => line.ProductId))
         {
-            var item = await repo.GetAsync(line.ProductId, ct)
-                       ?? new InventoryItem { Id = line.ProductId, ProductId = line.ProductId };
+            var item = await repo.GetAsync(lines.Key, ct)
+                       ?? new InventoryItem { Id = lines.Key, ProductId = lines.Key };
+            item.OrderSales ??= new List<InventoryOrderSale>();
+            if (item.OrderSales.Any(sale => sale.OrderId == order.Id))
+            {
+                continue;
+            }
 
-            InventoryMath.RecordSale(item, DateOnly.FromDateTime(order.CreatedAt), line.Quantity);
+            var quantity = lines.Sum(line => line.Quantity);
+            var stockDecrement = InventoryMath.RecordSale(item, DateOnly.FromDateTime(order.CreatedAt), quantity);
+            item.OrderSales.Add(new InventoryOrderSale
+            {
+                OrderId = order.Id,
+                Quantity = quantity,
+                StockDecrement = stockDecrement
+            });
             await repo.UpsertAsync(item, ct);
 
             var forecast = DemandForecaster.Forecast(item);
@@ -55,11 +67,62 @@ public class OrderStreamConsumer : EventConsumerBackgroundService
     }
 }
 
+/// <summary>
+/// Reverses the recorded sale when an order is cancelled on <c>orders.status-changed</c> before it
+/// shipped, so on-hand stock is restored and the forecast is not inflated by demand that never left.
+/// </summary>
+public class CancelledOrderStreamConsumer : EventConsumerBackgroundService
+{
+    public CancelledOrderStreamConsumer(IEventSubscriber subscriber, IServiceProvider serviceProvider, ILogger<CancelledOrderStreamConsumer> logger)
+        : base(subscriber, serviceProvider, logger)
+    {
+    }
+
+    protected override string Topic => Topics.OrdersStatusChanged;
+
+    protected override string ConsumerGroup => "inventory-service";
+
+    protected override async Task HandleAsync(EventEnvelope envelope, IServiceProvider scopedServices, CancellationToken ct)
+    {
+        var order = envelope.As<Order>();
+        if (order is not { Status: OrderStatus.Cancelled } || order.HasShipped())
+        {
+            return;
+        }
+
+        var repo = scopedServices.GetRequiredService<IDocumentRepository<InventoryItem>>();
+        foreach (var lines in order.Items.GroupBy(line => line.ProductId))
+        {
+            var item = await repo.GetAsync(lines.Key, ct)
+                       ?? new InventoryItem { Id = lines.Key, ProductId = lines.Key };
+            item.OrderSales ??= new List<InventoryOrderSale>();
+            var sale = item.OrderSales.FirstOrDefault(sale => sale.OrderId == order.Id);
+            if (sale is null)
+            {
+                item.OrderSales.Add(new InventoryOrderSale
+                {
+                    OrderId = order.Id,
+                    Quantity = lines.Sum(line => line.Quantity),
+                    Cancelled = true
+                });
+            }
+            else if (!sale.Cancelled)
+            {
+                InventoryMath.ReverseSale(item, DateOnly.FromDateTime(order.CreatedAt), sale.Quantity, sale.StockDecrement);
+                sale.Cancelled = true;
+            }
+
+            await repo.UpsertAsync(item, ct);
+        }
+    }
+}
+
 public static class InventoryMath
 {
     /// <summary>Applies a sale: reduces on-hand stock and appends to the day's sales bucket.</summary>
-    public static void RecordSale(InventoryItem item, DateOnly date, int quantity)
+    public static int RecordSale(InventoryItem item, DateOnly date, int quantity)
     {
+        var stockDecrement = Math.Min(Math.Max(item.OnHand, 0), quantity);
         item.OnHand = Math.Max(item.OnHand - quantity, 0);
 
         var point = item.SalesHistory.FirstOrDefault(p => p.Date == date);
@@ -76,6 +139,28 @@ public static class InventoryMath
         if (item.SalesHistory.Count > 730)
         {
             item.SalesHistory = item.SalesHistory.OrderByDescending(p => p.Date).Take(730).OrderBy(p => p.Date).ToList();
+        }
+
+        item.UpdatedAt = DateTime.UtcNow;
+        return stockDecrement;
+    }
+
+    /// <summary>Undoes <see cref="RecordSale"/> for a cancelled order: restocks and removes the units sold.</summary>
+    public static void ReverseSale(InventoryItem item, DateOnly date, int quantity)
+        => ReverseSale(item, date, quantity, quantity);
+
+    public static void ReverseSale(InventoryItem item, DateOnly date, int quantity, int stockDecrement)
+    {
+        item.OnHand += stockDecrement;
+
+        var point = item.SalesHistory.FirstOrDefault(p => p.Date == date);
+        if (point is not null)
+        {
+            point.Units = Math.Max(point.Units - quantity, 0);
+            if (point.Units == 0)
+            {
+                item.SalesHistory.Remove(point);
+            }
         }
 
         item.UpdatedAt = DateTime.UtcNow;

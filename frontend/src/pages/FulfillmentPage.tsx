@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getShipments, advanceShipment } from '../api/client';
+import { getShipments, advanceShipment, errorMessage } from '../api/client';
 import type { Shipment } from '../api/client';
 import { useLocale } from '../i18n/LocaleContext';
 
@@ -18,16 +18,21 @@ export default function FulfillmentPage() {
   useEffect(() => { load(); }, []);
 
   async function handleAdvance(orderId: string) {
+    setError('');
     try {
       const updated = await advanceShipment(orderId);
       setShipments(prev => prev.map(s => s.orderId === orderId ? updated : s));
-    } catch (e) { setError(String(e)); }
+    } catch (e) {
+      // e.g. the order is unpaid or was cancelled; reload so the board shows the current state.
+      setError(errorMessage(e));
+      load();
+    }
   }
 
   return (
     <div data-testid="fulfillment-page">
       <h1>{t('fulfillment.title')}</h1>
-      {error && <div className="error">{error}</div>}
+      {error && <div className="error" role="alert" data-testid="fulfillment-error">{error}</div>}
       {loading && <div>{t('fulfillment.loading')}</div>}
       <div data-testid="shipments-list" className="shipments-board">
         {shipments.map(s => (
@@ -36,7 +41,7 @@ export default function FulfillmentPage() {
             <div>{t('fulfillment.status')}: <span data-testid={`shipment-status-${s.orderId}`}>{s.status}</span></div>
             <div>{t('fulfillment.carrier')}: {s.carrier}</div>
             <div>{t('fulfillment.tracking')}: {s.trackingNumber}</div>
-            {s.status !== 'Delivered' && (
+            {s.status !== 'Delivered' && s.status !== 'Cancelled' && (
               <button data-testid={`advance-${s.orderId}`} onClick={() => handleAdvance(s.orderId)}>
                 {t('fulfillment.advance')}
               </button>

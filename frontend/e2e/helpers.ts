@@ -156,6 +156,7 @@ export async function mockAllApis(page: Page) {
   await page.route('**/api/orders/user/**', route => route.fulfill({ json: [ORDER] }));
   await page.route(`**/api/orders/${ORDER.id}/status`, route => route.fulfill({ json: ORDER_STATUS }));
   await page.route(`**/api/orders/${ORDER.id}`, route => route.fulfill({ json: ORDER }));
+  await page.route('**/api/orders/*/cancel', route => route.fulfill({ json: { ...ORDER, status: 'Cancelled' } }));
 
   // Fulfillment - generic first, specific last
   await page.route('**/api/fulfillment/shipments', route => route.fulfill({ json: SHIPMENTS }));

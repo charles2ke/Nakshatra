@@ -79,6 +79,10 @@ The portal keeps one navigation shell and swaps the visible pages per persona
 Selecting a user from the header switcher stores the persona locally; picking *Sign out* clears it.
 Restricted routes render an "access restricted" message instead of failing.
 
+Customers can cancel their own orders, and admins any order, until it ships. Cancelling returns the
+reserved stock, refunds a captured payment and stops the shipment. Checkout reports stock-outs
+before payment is taken, and the header shows the cart size and the number of unread notifications.
+
 ## Run the full stack
 
 ```bash

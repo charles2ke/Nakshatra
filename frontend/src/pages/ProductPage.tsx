@@ -4,12 +4,14 @@ import { getProduct, getAlsoPurchased, addToCart, getReviews, createReview } fro
 import type { Product, Review } from '../api/client';
 import RecommendationStrip from '../components/RecommendationStrip';
 import { usePersona } from '../context/PersonaContext';
+import { useBadges } from '../context/BadgeContext';
 import { useLocale } from '../i18n/LocaleContext';
 
 export default function ProductPage() {
   const { id } = useParams<{ id: string }>();
   const { currentUser } = usePersona();
   const { t, formatCurrency } = useLocale();
+  const { syncCart } = useBadges();
   const [product, setProduct] = useState<Product | null>(null);
   const [recs, setRecs] = useState<Product[]>([]);
   const [toast, setToast] = useState('');
@@ -41,7 +43,8 @@ export default function ProductPage() {
   async function handleAddToCart() {
     if (!product || !currentUser) return;
     try {
-      await addToCart(currentUser.id, product.id, 1);
+      const res = await addToCart(currentUser.id, product.id, 1);
+      syncCart(res.cart);
       setToast(t('product.addedToCart'));
       setTimeout(() => setToast(''), 3000);
     } catch { setToast(t('product.addFailed')); }
