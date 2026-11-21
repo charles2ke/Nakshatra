@@ -28,7 +28,8 @@ public static class OrderStatusUpdater
 
 /// <summary>
 /// Moves an order to <see cref="OrderStatus.Paid"/> when the payment service reports a captured
-/// payment on the <c>payments.completed</c> stream, and cancels it when the payment is refunded.
+/// payment on the <c>payments.completed</c> stream, and cancels it when the payment is refunded
+/// (unless the refund is for a return, which is only noted in the order history).
 /// </summary>
 public class PaymentStreamConsumer : EventConsumerBackgroundService
 {
@@ -60,6 +61,13 @@ public class PaymentStreamConsumer : EventConsumerBackgroundService
 
         if (payment.Status == PaymentStatus.Refunded)
         {
+            // Returns are refunded by design; the refund must not turn a returned order into a cancelled one.
+            if (OrderReturns.IsInReturn(order))
+            {
+                await OrderReturns.RecordRefundAsync(repo, order, payment.Id, ct);
+                return;
+            }
+
             var catalog = scopedServices.GetRequiredService<CatalogClient>();
             await OrderCancellation.CancelAsync(repo, cancellationWorkRepo, publisher, catalog, order, $"Payment {payment.Id} refunded.", ct);
             return;

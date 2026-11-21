@@ -15,6 +15,7 @@ public static class Topics
     public const string InventoryReplenishmentOrdered = "inventory.replenishment-ordered";
     public const string SupplyChainEventRecorded = "supplychain.event-recorded";
     public const string NotificationRequested = "notifications.requested";
+    public const string ProductsBackInStock = "products.back-in-stock";
 }
 
 public record EventEnvelope(string Topic, string Key, string Payload)

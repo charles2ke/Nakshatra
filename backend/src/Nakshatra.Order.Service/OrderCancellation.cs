@@ -10,41 +10,79 @@ using Nakshatra.Shared.Storage;
 /// </summary>
 public static class OrderCancellation
 {
-    public static async Task<Order> CancelAsync(
+    public static Task<Order> CancelAsync(
         IDocumentRepository<Order> repo,
         IDocumentRepository<OrderCancellationWork> workRepo,
         IEventPublisher publisher,
         CatalogClient catalog,
         Order order,
         string note,
-        CancellationToken ct = default)
-    {
-        var work = await workRepo.GetAsync(order.Id, ct);
-        if (work is null)
+        CancellationToken ct = default) =>
+        OrderStockReturn.RunAsync(repo, workRepo, publisher, catalog, order, () =>
         {
-            var cancelledOrder = CopyOrder(order);
+            var cancelledOrder = OrderSnapshot.Copy(order);
             if (cancelledOrder.Status != OrderStatus.Cancelled)
             {
                 cancelledOrder.Status = OrderStatus.Cancelled;
                 cancelledOrder.History.Add(new OrderStatusChange { Status = OrderStatus.Cancelled, Note = note });
             }
 
-            var restock = !order.HasShipped();
-            work = new OrderCancellationWork
+            return new OrderCancellationWork
             {
                 Id = order.Id,
                 Order = cancelledOrder,
-                Restock = restock,
+                Restock = !order.HasShipped(),
                 ReleasedLines = new List<bool>(new bool[cancelledOrder.Items.Count])
             };
+        }, ct);
+}
+
+/// <summary>
+/// Durable progress of a status change that may hand stock back to the catalog (a cancellation or a
+/// completed return). Retrying with the same work document finishes the job without repeating steps.
+/// </summary>
+public interface IOrderStockReturnWork : IEntity
+{
+    Order Order { get; set; }
+    bool Restock { get; set; }
+    bool StatusChangedPublished { get; set; }
+    List<bool> ReleasedLines { get; set; }
+}
+
+public static class OrderStockReturn
+{
+    /// <summary>
+    /// Stores the order in its new state, streams the change once and releases each line's stock once.
+    /// The work document is created on the first attempt and reused by every retry.
+    /// </summary>
+    public static async Task<Order> RunAsync<TWork>(
+        IDocumentRepository<Order> repo,
+        IDocumentRepository<TWork> workRepo,
+        IEventPublisher publisher,
+        CatalogClient catalog,
+        Order order,
+        Func<TWork> createWork,
+        CancellationToken ct)
+        where TWork : class, IOrderStockReturnWork
+    {
+        var work = await workRepo.GetAsync(order.Id, ct);
+        if (work is null)
+        {
+            work = createWork();
             if (!await workRepo.TryCreateAsync(work, ct))
             {
                 work = await workRepo.GetAsync(order.Id, ct)
-                       ?? throw new InvalidOperationException($"Cancellation work for order '{order.Id}' could not be loaded.");
+                       ?? throw new InvalidOperationException($"Status change work for order '{order.Id}' could not be loaded.");
             }
         }
 
-        await repo.UpsertAsync(work.Order, ct);
+        // Once the new status is stored, a retry must not overwrite later changes such as a refund note.
+        var current = order;
+        if (order.Status != work.Order.Status)
+        {
+            await repo.UpsertAsync(work.Order, ct);
+            current = work.Order;
+        }
 
         if (!work.StatusChangedPublished)
         {
@@ -80,10 +118,14 @@ public static class OrderCancellation
             throw new InvalidOperationException($"Stock for order '{order.Id}' could not be fully released.");
         }
 
-        return work.Order;
+        return current;
     }
+}
 
-    private static Order CopyOrder(Order order) => new()
+public static class OrderSnapshot
+{
+    /// <summary>Deep copy, so a work document's snapshot never shares lists with the live order.</summary>
+    public static Order Copy(Order order) => new()
     {
         Id = order.Id,
         UserId = order.UserId,
@@ -106,11 +148,21 @@ public static class OrderCancellation
             Status = change.Status,
             Timestamp = change.Timestamp,
             Note = change.Note
-        }).ToList()
+        }).ToList(),
+        Discount = order.Discount,
+        CouponCode = order.CouponCode,
+        DeliverySpeed = order.DeliverySpeed,
+        ShippingFee = order.ShippingFee,
+        EstimatedDelivery = order.EstimatedDelivery,
+        GiftWrap = order.GiftWrap,
+        GiftWrapFee = order.GiftWrapFee,
+        GiftMessage = order.GiftMessage,
+        BuyNow = order.BuyNow,
+        ReturnReason = order.ReturnReason
     };
 }
 
-public class OrderCancellationWork : IEntity
+public class OrderCancellationWork : IOrderStockReturnWork
 {
     public string Id { get; set; } = string.Empty;
     public Order Order { get; set; } = new();

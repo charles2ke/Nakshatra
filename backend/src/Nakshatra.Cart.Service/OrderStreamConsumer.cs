@@ -6,7 +6,8 @@ namespace Nakshatra.Cart.Service;
 
 /// <summary>
 /// Takes the ordered quantities out of the customer's cart when an order is streamed on
-/// <c>orders.created</c>. Anything added to the cart after checkout started is kept.
+/// <c>orders.created</c>. Anything added to the cart after checkout started is kept, and
+/// "Buy Now" orders, which bypass the cart, leave it untouched.
 /// </summary>
 public class OrderStreamConsumer : EventConsumerBackgroundService
 {
@@ -22,7 +23,7 @@ public class OrderStreamConsumer : EventConsumerBackgroundService
     protected override async Task HandleAsync(EventEnvelope envelope, IServiceProvider scopedServices, CancellationToken ct)
     {
         var order = envelope.As<Order>();
-        if (order is null || string.IsNullOrWhiteSpace(order.UserId))
+        if (order is null || order.BuyNow || string.IsNullOrWhiteSpace(order.UserId))
         {
             return;
         }

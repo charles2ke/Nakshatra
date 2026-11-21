@@ -7,7 +7,7 @@ using Nakshatra.Shared.Models;
 
 namespace Nakshatra.Shared.Http;
 
-/// <summary>Client for the order service, used by the fulfillment and billing services.</summary>
+/// <summary>Client for the order service, used by the fulfillment, billing and catalog services.</summary>
 public class OrderClient
 {
     private readonly HttpClient _httpClient;
@@ -47,6 +47,21 @@ public class OrderClient
         {
             _logger.LogWarning(ex, "Order service unavailable while loading order {OrderId}.", LogSanitizer.Sanitize(orderId));
             return new OrderLookupResult(OrderLookupStatus.Unavailable);
+        }
+    }
+
+    /// <summary>Returns the user's orders, or <c>null</c> when the order service cannot be reached.</summary>
+    public async Task<IReadOnlyList<Order>?> GetOrdersForUserAsync(string userId, CancellationToken ct = default)
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<List<Order>>(
+                $"/api/orders/user/{Uri.EscapeDataString(userId)}", ServiceDefaults.JsonOptions, ct);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or NotSupportedException)
+        {
+            _logger.LogWarning(ex, "Order service unavailable while loading orders for user {UserId}.", LogSanitizer.Sanitize(userId));
+            return null;
         }
     }
 

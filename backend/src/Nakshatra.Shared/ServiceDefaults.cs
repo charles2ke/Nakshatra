@@ -209,6 +209,7 @@ public static class ServiceDefaults
     public static string CollectionNameFor(Type entityType) => entityType.Name.ToLowerInvariant() switch
     {
         "category" => "categories",
+        "address" => "addresses",
         var name => name + "s"
     };
 }

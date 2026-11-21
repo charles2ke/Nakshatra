@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using System.Net;
+using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -6,6 +8,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Nakshatra.Shared;
+using Nakshatra.Shared.Caching;
 using Nakshatra.Shared.Http;
 using Nakshatra.Shared.Messaging;
 using Nakshatra.Shared.Models;
@@ -47,4 +50,46 @@ internal static class TestHosts
         Total = total,
         Status = OrderStatus.AwaitingPayment
     };
+
+    /// <summary>JSON response in the services' wire format.</summary>
+    public static HttpResponseMessage Json<T>(T body, HttpStatusCode status = HttpStatusCode.OK) => new(status)
+    {
+        Content = new StringContent(JsonSerializer.Serialize(body, ServiceDefaults.JsonOptions), Encoding.UTF8, "application/json")
+    };
+}
+
+/// <summary>Answers each request with a response chosen by the test, e.g. by path.</summary>
+internal sealed class LambdaHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
+{
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        => Task.FromResult(respond(request));
+}
+
+/// <summary>
+/// Always calls through. The in-process cache is static, so a cached catalog listing from another test
+/// would otherwise hide the products a test set up.
+/// </summary>
+internal sealed class PassThroughCache : ICacheService
+{
+    public Task<T?> GetAsync<T>(string key, CancellationToken ct = default) => Task.FromResult(default(T));
+
+    public Task SetAsync<T>(string key, T value, TimeSpan? ttl = null, CancellationToken ct = default) => Task.CompletedTask;
+
+    public Task RemoveAsync(string key, CancellationToken ct = default) => Task.CompletedTask;
+
+    public Task<T> GetOrSetAsync<T>(string key, Func<Task<T>> factory, TimeSpan? ttl = null, CancellationToken ct = default) => factory();
+}
+
+/// <summary>Records published events instead of delivering them.</summary>
+internal sealed class CapturingPublisher : IEventPublisher
+{
+    private readonly ConcurrentQueue<(string Topic, string Key, JsonElement Payload)> _events = new();
+
+    public IReadOnlyList<(string Topic, string Key, JsonElement Payload)> Events => _events.ToList();
+
+    public Task PublishAsync<T>(string topic, string key, T payload, CancellationToken ct = default)
+    {
+        _events.Enqueue((topic, key, JsonSerializer.SerializeToElement(payload)));
+        return Task.CompletedTask;
+    }
 }

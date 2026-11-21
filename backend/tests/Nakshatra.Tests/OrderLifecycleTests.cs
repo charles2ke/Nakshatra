@@ -21,9 +21,9 @@ namespace Nakshatra.Tests;
 
 /// <summary>
 /// Order lifecycle across services: stock reservation, cancellation, payment verification, refunds,
-/// fulfillment and cart clean-up.
+/// fulfillment and cart clean-up. Checkout pricing and returns are in OrderLifecycleTests.CheckoutAndReturns.cs.
 /// </summary>
-public class OrderLifecycleTests
+public partial class OrderLifecycleTests
 {
     [Fact]
     public async Task Orders_exceeding_stock_are_rejected_and_earlier_reservations_rolled_back()
