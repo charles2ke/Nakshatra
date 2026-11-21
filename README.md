@@ -71,10 +71,10 @@ The portal keeps one navigation shell and swaps the visible pages per persona
 
 | Persona | Pages available |
 |---------|-----------------|
-| **Customer** | Home, Search, Cart, Checkout, Orders, Billing, Notifications |
+| **Customer** | Home, Search, Cart, Wish List, Checkout, Orders, Addresses, Billing, Notifications |
 | **Vendor** | Home, Orders, Billing, Inventory & demand planning, Products setup, Notifications |
-| **Admin** | Everything, including vendor and user setup |
-| **FulfillmentAgent** | Home, Orders, Fulfillment board, Notifications |
+| **Admin** | Everything, including vendor, user and coupon setup |
+| **FulfillmentAgent** | Home, Orders, Fulfillment board (shipments and incoming returns), Notifications |
 
 Selecting a user from the header switcher stores the persona locally; picking *Sign out* clears it.
 Restricted routes render an "access restricted" message instead of failing.
@@ -82,6 +82,21 @@ Restricted routes render an "access restricted" message instead of failing.
 Customers can cancel their own orders, and admins any order, until it ships. Cancelling returns the
 reserved stock, refunds a captured payment and stops the shipment. Checkout reports stock-outs
 before payment is taken, and the header shows the cart size and the number of unread notifications.
+
+The shopping experience follows the familiar large-marketplace patterns:
+
+- **Discovery** — a deals strip (list price vs. price) and recently viewed products on the home
+  page, star ratings on product cards, and search refinements for minimum rating, in-stock only,
+  deals only and sort order (price, rating, newest).
+- **Product page** — reviews marked *Verified Purchase* (with a verified-only filter) and helpful
+  votes, customer questions and answers, *Notify me when available* for sold-out products,
+  *Add to Wish List* and *Buy Now* (checks out the single product without touching the cart).
+- **Cart and checkout** — *Save for later*, a wish list, an address book with a default address,
+  coupon codes, Standard / Expedited / One-Day delivery with an estimated delivery date, free
+  standard shipping above a threshold, and gift wrap with a gift message.
+- **After purchase** — order search and status/time filters, estimated delivery on each order,
+  *Buy it again*, and returns within 30 days of delivery: the fulfillment agent receives the
+  return, which restocks the items and refunds the payment.
 
 ## Run the full stack
 

@@ -39,6 +39,7 @@ interface LocaleContextValue {
   t: (key: string, vars?: Record<string, string>) => string;
   formatCurrency: (amount: number, currency: string) => string;
   formatDate: (iso: string) => string;
+  formatDay: (iso: string) => string;
   formatNumber: (n: number) => string;
 }
 
@@ -48,6 +49,7 @@ const LocaleContext = createContext<LocaleContextValue>({
   t: (k) => k,
   formatCurrency: (a, c) => `${c} ${a}`,
   formatDate: (s) => s,
+  formatDay: (s) => s,
   formatNumber: (n) => String(n),
 });
 
@@ -89,12 +91,24 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
     }
   }, [locale]);
 
+  // Calendar days such as delivery estimates and coupon expiry arrive as a UTC day ("2024-06-05T00:00:00Z").
+  // Formatting them in the browser's time zone would show the previous or next day away from UTC, so they
+  // are formatted in UTC. A value without a zone ("2024-06-05T00:00:00") is read as UTC too, not local time.
+  const formatDay = useCallback((iso: string) => {
+    try {
+      const utc = /T[\d:.]+$/.test(iso) ? `${iso}Z` : iso;
+      return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(utc));
+    } catch {
+      return iso;
+    }
+  }, [locale]);
+
   const formatNumber = useCallback((n: number) => {
     return new Intl.NumberFormat(locale).format(n);
   }, [locale]);
 
   return (
-    <LocaleContext.Provider value={{ locale, setLocale, t, formatCurrency, formatDate, formatNumber }}>
+    <LocaleContext.Provider value={{ locale, setLocale, t, formatCurrency, formatDate, formatDay, formatNumber }}>
       {children}
     </LocaleContext.Provider>
   );

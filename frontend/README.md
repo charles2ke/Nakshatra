@@ -23,6 +23,23 @@ npx playwright install --with-deps chromium
 npm run test:e2e
 ```
 
+The e2e tests mock every `/api/*` call, so no backend is needed:
+
+- `e2e/helpers.ts` holds the fixtures, the persona injectors and `mockAllApis(page)`. The address
+  book, wish list and coupon mocks (`mockAddressBook`, `mockWishList`, `mockCoupons`) keep state
+  for the page and follow the service rules, and `priceCheckout()` mirrors the order service's
+  pricing for `/api/orders/quote`.
+- `e2e/app.spec.ts` covers navigation, personas, locales, accessibility and the core flows;
+  `e2e/shopping.spec.ts` covers deals, recently viewed, Buy Now, reviews, questions and answers,
+  stock alerts, the wish list, search refinements, saved for later, addresses, checkout options,
+  order filters, returns, coupon setup, and delivery and expiry dates in other time zones.
+- The route registered last wins, and `**/api/search**` also matches `/api/search/suggest`, so
+  override search results with a URL predicate rather than another glob.
+- Tests that assert dates pin `test.use({ timezoneId: 'UTC' })` and `page.clock.setFixedTime(...)`.
+  The `west of UTC` and `east of UTC` blocks in `shopping.spec.ts` run in `America/New_York` and
+  `Asia/Kolkata` time instead, so a calendar day that shifts with the browser's time zone fails them.
+- Tests save screenshots to `e2e/screenshots/`.
+
 ## Build
 
 ```bash
@@ -54,6 +71,9 @@ npm run build
   `refreshBadges()` when they have no fresh data; counts also refresh on every navigation.
 - **Type-ahead**: `SuggestInput` is an ARIA combobox over `/api/search/suggest` (arrow keys,
   `Enter`, `Escape`); reuse it for any keyword field.
+- **Recently viewed** products are kept per user in the browser (`localStorage` key
+  `nakshatra_recent_<userId>`, the last 10 product ids) by `useRecentlyViewed`; the history is not
+  stored on the server.
 
 ---
 
@@ -65,7 +85,7 @@ The app uses a lightweight, zero-dependency i18n layer built on plain React cont
 
 | File | Purpose |
 |------|---------|
-| `src/i18n/LocaleContext.tsx` | `LocaleProvider`, `useLocale()` hook — provides `t()`, `formatCurrency()`, `formatDate()`, `formatNumber()` |
+| `src/i18n/LocaleContext.tsx` | `LocaleProvider`, `useLocale()` hook — provides `t()`, `formatCurrency()`, `formatDate()`, `formatDay()`, `formatNumber()` |
 | `src/i18n/locales/en.json` | English catalog (default) |
 | `src/i18n/locales/es.json` | Spanish catalog |
 | `src/i18n/locales/hi.json` | Hindi catalog |
@@ -75,6 +95,10 @@ The app uses a lightweight, zero-dependency i18n layer built on plain React cont
 - `document.documentElement.lang` is updated on every switch.
 - If a key is missing in the active locale the app falls back to `en` and logs a `console.warn` **once** per key.
 - Numbers/currencies use `Intl.NumberFormat`; dates use `Intl.DateTimeFormat` with the active locale.
+- `formatDate()` shows a moment in time (an order's `createdAt`, a status timestamp) in the browser's
+  time zone. `formatDay()` shows a calendar day that the server sends in UTC (an estimated delivery
+  date, a coupon's expiry) in UTC, so it reads as the same day in every time zone; a value without a
+  zone is read as UTC as well.
 
 ### Adding a new locale
 

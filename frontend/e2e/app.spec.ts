@@ -148,6 +148,8 @@ test('switching to Spanish updates visible nav text', async ({ page }) => {
   await expect(page.locator('[data-testid="home-title"]')).toHaveText('Tienda Nakshatra');
   await expect(page.locator('[data-testid="nav-home"]')).toHaveText('Inicio');
   await expect(page.locator('[data-testid="nav-cart"]')).toHaveText('Carrito');
+  await expect(page.locator('[data-testid="nav-wishlist"]')).toHaveText('Lista de deseos');
+  await expect(page.locator('[data-testid="nav-addresses"]')).toHaveText('Direcciones');
   await page.screenshot({ path: 'e2e/screenshots/locale-es.png' });
 });
 
@@ -158,6 +160,8 @@ test('switching to Hindi updates visible text', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('[data-testid="home-title"]')).toHaveText('नक्षत्र शॉप');
   await expect(page.locator('[data-testid="nav-home"]')).toHaveText('मुख्य पृष्ठ');
+  await expect(page.locator('[data-testid="nav-wishlist"]')).toHaveText('विश लिस्ट');
+  await expect(page.locator('[data-testid="nav-addresses"]')).toHaveText('पते');
   await page.screenshot({ path: 'e2e/screenshots/locale-hi.png' });
 });
 
