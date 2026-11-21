@@ -10,6 +10,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddNakshatraInfrastructure(builder.Configuration);
 builder.Services.AddHttpClient<OrderClient>();
 builder.Services.AddScoped<BackInStockNotifier>();
+builder.Services.AddSingleton<HelpfulVotes>();
 
 var app = builder.Build();
 app.UseNakshatraDefaults("catalog-service");
@@ -145,7 +146,7 @@ app.MapPost("/api/products/{productId}/reviews/{reviewId}/helpful", async (
     string productId,
     string reviewId,
     HelpfulVoteRequest request,
-    IDocumentRepository<Review> repo,
+    HelpfulVotes votes,
     CancellationToken ct) =>
 {
     var userId = request.UserId?.Trim();
@@ -154,7 +155,7 @@ app.MapPost("/api/products/{productId}/reviews/{reviewId}/helpful", async (
         return Results.BadRequest(new { error = "A user id is required to vote." });
     }
 
-    var review = await repo.GetAsync(reviewId, ct);
+    var review = await votes.RecordAsync(productId, reviewId, userId, ct);
     if (review is null || review.ProductId != productId)
     {
         return Results.NotFound(new { error = $"Review '{reviewId}' was not found." });
@@ -163,13 +164,6 @@ app.MapPost("/api/products/{productId}/reviews/{reviewId}/helpful", async (
     if (review.UserId == userId)
     {
         return Results.BadRequest(new { error = "You cannot vote on your own review." });
-    }
-
-    if (!review.HelpfulVoterIds.Contains(userId))
-    {
-        review.HelpfulVoterIds.Add(userId);
-        review.HelpfulCount = review.HelpfulVoterIds.Count;
-        await repo.UpsertAsync(review, ct);
     }
 
     return Results.Ok(review);

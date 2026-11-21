@@ -3,12 +3,14 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using MongoDB.Driver;
 using Nakshatra.Catalog.Service;
 using Nakshatra.Shared;
 using Nakshatra.Shared.Caching;
 using Nakshatra.Shared.Http;
 using Nakshatra.Shared.Messaging;
 using Nakshatra.Shared.Models;
+using Nakshatra.Shared.Storage;
 using CatalogService = Nakshatra.Catalog.Service.ServiceMarker;
 using OrderEntity = Nakshatra.Shared.Models.Order;
 using SearchService = Nakshatra.Search.Service.ServiceMarker;
@@ -47,6 +49,17 @@ public class DiscoveryTests
         Assert.Equal(2, stored.ReviewCount);
     }
 
+    public sealed class MongoFactAttribute : FactAttribute
+    {
+        public MongoFactAttribute()
+        {
+            if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("NAKSHATRA_TEST_MONGO")))
+            {
+                Skip = "Set NAKSHATRA_TEST_MONGO to run MongoDB integration tests.";
+            }
+        }
+    }
+
     [Fact]
     public async Task Helpful_votes_count_each_shopper_once_and_never_the_author()
     {
@@ -69,6 +82,54 @@ public class DiscoveryTests
         Assert.Equal(HttpStatusCode.NotFound, wrongProduct.StatusCode);
         // Voter ids are kept private.
         Assert.DoesNotContain("voter-1", await second.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Concurrent_helpful_votes_retain_distinct_shoppers_and_ignore_duplicates()
+    {
+        using var catalog = TestHosts.Create<CatalogService>(NoOrderService);
+        await AssertConcurrentHelpfulVotesAsync(catalog);
+    }
+
+    [MongoFact]
+    public async Task Mongo_concurrent_helpful_votes_retain_distinct_shoppers_and_ignore_duplicates()
+    {
+        var client = new MongoClient(Environment.GetEnvironmentVariable("NAKSHATRA_TEST_MONGO"));
+        var databaseName = $"nakshatra_votes_{Guid.NewGuid():N}";
+        var database = client.GetDatabase(databaseName);
+        try
+        {
+            using var catalog = TestHosts.Create<CatalogService>(services =>
+            {
+                NoOrderService(services);
+                services.AddSingleton(database);
+                services.AddSingleton<IDocumentRepository<Review>>(
+                    new MongoDocumentRepository<Review>(database, ServiceDefaults.CollectionNameFor(typeof(Review))));
+            });
+            await AssertConcurrentHelpfulVotesAsync(catalog);
+        }
+        finally
+        {
+            await client.DropDatabaseAsync(databaseName);
+        }
+    }
+
+    private static async Task AssertConcurrentHelpfulVotesAsync(WebApplicationFactory<CatalogService> catalog)
+    {
+        using var client = catalog.CreateClient();
+        var product = await CreateProductAsync(client, stock: 3);
+        var review = await PostReviewAsync(client, product.Id, $"author-{Guid.NewGuid():N}", rating: 5);
+        var path = $"/api/products/{product.Id}/reviews/{review.Id}/helpful";
+        var voters = Enumerable.Range(0, 40).Select(i => $"voter-{i}").ToArray();
+
+        var responses = await Task.WhenAll(voters.Concat(voters).Select(userId =>
+            Task.Run(() => client.PostAsJsonAsync(path, new { userId }))));
+
+        Assert.All(responses, response => Assert.Equal(HttpStatusCode.OK, response.StatusCode));
+        var stored = await catalog.Services.GetRequiredService<IDocumentRepository<Review>>().GetAsync(review.Id);
+        Assert.NotNull(stored);
+        Assert.Equal(voters.Length, stored.HelpfulCount);
+        Assert.Equal(voters.OrderBy(x => x), stored.HelpfulVoterIds.OrderBy(x => x));
     }
 
     [Fact]
