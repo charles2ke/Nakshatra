@@ -38,14 +38,15 @@ app.MapPost("/api/cart/{userId}/items", async (
         return Results.NotFound(new { error = $"Product '{request.ProductId}' was not found." });
     }
 
-    var cart = await repo.GetAsync(userId, ct) ?? CartLines.Empty(userId);
-    CartLines.Add(cart.Items, product.Id, product.Name, product.Price, request.Quantity);
-
-    await repo.UpsertAsync(cart, ct);
+    var (cart, _) = await ShoppingState.ChangeCartAsync(repo, userId, true, cart =>
+    {
+        CartLines.Add(cart.Items, product.Id, product.Name, product.Price, request.Quantity);
+        return StateChange.Changed;
+    }, ct);
     await publisher.PublishAsync(Topics.CartItemAdded, userId, new { userId, productId = product.Id, request.Quantity }, ct);
 
     var alsoPurchased = (await recommendations.GetAlsoPurchasedAsync(product.Id, 4, ct))
-        .Where(p => cart.Items.All(i => i.ProductId != p.Id))
+        .Where(p => cart!.Items.All(i => i.ProductId != p.Id))
         .ToList();
 
     return Results.Ok(new { cart, recommendations = alsoPurchased });
@@ -58,23 +59,15 @@ app.MapPut("/api/cart/{userId}/items/{productId}", async (
     IDocumentRepository<Cart> repo,
     CancellationToken ct) =>
 {
-    var cart = await repo.GetAsync(userId, ct);
-    var item = cart?.Items.FirstOrDefault(i => i.ProductId == productId);
-    if (cart is null || item is null)
+    var (cart, _) = await ShoppingState.ChangeCartAsync(repo, userId, false, cart =>
     {
-        return Results.NotFound();
-    }
-
-    if (request.Quantity <= 0)
-    {
-        cart.Items.Remove(item);
-    }
-    else
-    {
-        item.Quantity = request.Quantity;
-    }
-
-    await repo.UpsertAsync(cart, ct);
+        var item = cart.Items.FirstOrDefault(i => i.ProductId == productId);
+        if (item is null) return StateChange.Missing;
+        if (request.Quantity <= 0) cart.Items.Remove(item);
+        else item.Quantity = request.Quantity;
+        return StateChange.Changed;
+    }, ct);
+    if (cart is null) return Results.NotFound();
     return Results.Ok(cart);
 });
 
@@ -84,23 +77,23 @@ app.MapDelete("/api/cart/{userId}/items/{productId}", async (
     IDocumentRepository<Cart> repo,
     CancellationToken ct) =>
 {
-    var cart = await repo.GetAsync(userId, ct);
-    if (cart is null)
+    var (cart, _) = await ShoppingState.ChangeCartAsync(repo, userId, false, cart =>
     {
-        return Results.NotFound();
-    }
-
-    cart.Items.RemoveAll(i => i.ProductId == productId);
-    await repo.UpsertAsync(cart, ct);
+        cart.Items.RemoveAll(i => i.ProductId == productId);
+        return StateChange.Changed;
+    }, ct);
+    if (cart is null) return Results.NotFound();
     return Results.Ok(cart);
 });
 
 // Empties the cart for checkout; items saved for later stay saved.
 app.MapDelete("/api/cart/{userId}", async (string userId, IDocumentRepository<Cart> repo, CancellationToken ct) =>
 {
-    var cart = await repo.GetAsync(userId, ct) ?? CartLines.Empty(userId);
-    cart.Items.Clear();
-    await repo.UpsertAsync(cart, ct);
+    var (cart, _) = await ShoppingState.ChangeCartAsync(repo, userId, true, cart =>
+    {
+        cart.Items.Clear();
+        return StateChange.Changed;
+    }, ct);
     return Results.Ok(cart);
 });
 
@@ -111,16 +104,15 @@ app.MapPost("/api/cart/{userId}/items/{productId}/save-for-later", async (
     IDocumentRepository<Cart> repo,
     CancellationToken ct) =>
 {
-    var cart = await repo.GetAsync(userId, ct);
-    var item = cart?.Items.FirstOrDefault(i => i.ProductId == productId);
-    if (cart is null || item is null)
+    var (cart, _) = await ShoppingState.ChangeCartAsync(repo, userId, false, cart =>
     {
-        return Results.NotFound();
-    }
-
-    cart.Items.Remove(item);
-    CartLines.Add(cart.SavedForLater, item.ProductId, item.Name, item.Price, item.Quantity);
-    await repo.UpsertAsync(cart, ct);
+        var item = cart.Items.FirstOrDefault(i => i.ProductId == productId);
+        if (item is null) return StateChange.Missing;
+        cart.Items.Remove(item);
+        CartLines.Add(cart.SavedForLater, item.ProductId, item.Name, item.Price, item.Quantity);
+        return StateChange.Changed;
+    }, ct);
+    if (cart is null) return Results.NotFound();
     return Results.Ok(cart);
 });
 
@@ -132,13 +124,6 @@ app.MapPost("/api/cart/{userId}/saved/{productId}/move-to-cart", async (
     IEventPublisher publisher,
     CancellationToken ct) =>
 {
-    var cart = await repo.GetAsync(userId, ct);
-    var saved = cart?.SavedForLater.FirstOrDefault(i => i.ProductId == productId);
-    if (cart is null || saved is null)
-    {
-        return Results.NotFound();
-    }
-
     // The price may have changed while the item was set aside; keep the saved price if the catalog is down.
     var lookup = await catalog.LookupProductAsync(productId, ct);
     if (lookup.Status == ProductLookupStatus.NotFound)
@@ -146,12 +131,18 @@ app.MapPost("/api/cart/{userId}/saved/{productId}/move-to-cart", async (
         return Results.NotFound(new { error = $"Product '{productId}' is no longer available." });
     }
 
-    var name = lookup.Product?.Name ?? saved.Name;
-    var price = lookup.Product?.Price ?? saved.Price;
-    cart.SavedForLater.Remove(saved);
-    CartLines.Add(cart.Items, productId, name, price, saved.Quantity);
-    await repo.UpsertAsync(cart, ct);
-    await publisher.PublishAsync(Topics.CartItemAdded, userId, new { userId, productId, saved.Quantity }, ct);
+    var quantity = 0;
+    var (cart, _) = await ShoppingState.ChangeCartAsync(repo, userId, false, cart =>
+    {
+        var saved = cart.SavedForLater.FirstOrDefault(i => i.ProductId == productId);
+        if (saved is null) return StateChange.Missing;
+        quantity = saved.Quantity;
+        cart.SavedForLater.Remove(saved);
+        CartLines.Add(cart.Items, productId, lookup.Product?.Name ?? saved.Name, lookup.Product?.Price ?? saved.Price, quantity);
+        return StateChange.Changed;
+    }, ct);
+    if (cart is null) return Results.NotFound();
+    await publisher.PublishAsync(Topics.CartItemAdded, userId, new { userId, productId, Quantity = quantity }, ct);
     return Results.Ok(cart);
 });
 
@@ -161,14 +152,12 @@ app.MapDelete("/api/cart/{userId}/saved/{productId}", async (
     IDocumentRepository<Cart> repo,
     CancellationToken ct) =>
 {
-    var cart = await repo.GetAsync(userId, ct);
-    if (cart is null)
+    var (cart, _) = await ShoppingState.ChangeCartAsync(repo, userId, false, cart =>
     {
-        return Results.NotFound();
-    }
-
-    cart.SavedForLater.RemoveAll(i => i.ProductId == productId);
-    await repo.UpsertAsync(cart, ct);
+        cart.SavedForLater.RemoveAll(i => i.ProductId == productId);
+        return StateChange.Changed;
+    }, ct);
+    if (cart is null) return Results.NotFound();
     return Results.Ok(cart);
 });
 
@@ -202,14 +191,14 @@ app.MapPost("/api/wishlist/{userId}/items", async (
         return Results.NotFound(new { error = $"Product '{request.ProductId}' was not found." });
     }
 
-    var list = await repo.GetAsync(userId, ct) ?? new WishList { Id = userId, UserId = userId };
-    if (list.Items.All(i => i.ProductId != product.Id))
+    var list = await ShoppingState.ChangeWishListAsync(repo, userId, true, list =>
     {
-        list.Items.Add(new WishListItem { ProductId = product.Id, Name = product.Name, PriceWhenAdded = product.Price });
-        await repo.UpsertAsync(list, ct);
-    }
+        if (list.Items.Any(i => i.ProductId == product.Id)) return StateChange.Unchanged;
+        list.Items.Add(new WishListItem { ProductId = product.Id, Name = product.Name, PriceWhenAdded = product.Price, EntryId = Guid.NewGuid().ToString("N") });
+        return StateChange.Changed;
+    }, ct);
 
-    return Results.Ok(await CartLines.ToViewAsync(list, catalog, ct));
+    return Results.Ok(await CartLines.ToViewAsync(list!, catalog, ct));
 });
 
 app.MapDelete("/api/wishlist/{userId}/items/{productId}", async (
@@ -219,14 +208,16 @@ app.MapDelete("/api/wishlist/{userId}/items/{productId}", async (
     CatalogClient catalog,
     CancellationToken ct) =>
 {
-    var list = await repo.GetAsync(userId, ct);
+    var list = await ShoppingState.ChangeWishListAsync(repo, userId, false, list =>
+    {
+        list.Items.RemoveAll(i => i.ProductId == productId);
+        return StateChange.Changed;
+    }, ct);
     if (list is null)
     {
         return Results.NotFound();
     }
 
-    list.Items.RemoveAll(i => i.ProductId == productId);
-    await repo.UpsertAsync(list, ct);
     return Results.Ok(await CartLines.ToViewAsync(list, catalog, ct));
 });
 
@@ -239,31 +230,43 @@ app.MapPost("/api/wishlist/{userId}/items/{productId}/move-to-cart", async (
     IEventPublisher publisher,
     CancellationToken ct) =>
 {
-    var list = await wishLists.GetAsync(userId, ct);
+    // Assign legacy entries an identity with a conditional write before creating a receipt.
+    var list = await ShoppingState.ChangeWishListAsync(wishLists, userId, false, current =>
+    {
+        var item = current.Items.FirstOrDefault(i => i.ProductId == productId);
+        if (item is null) return StateChange.Missing;
+        if (!string.IsNullOrEmpty(item.EntryId)) return StateChange.Unchanged;
+        item.EntryId = Guid.NewGuid().ToString("N");
+        return StateChange.Changed;
+    }, ct);
     var entry = list?.Items.FirstOrDefault(i => i.ProductId == productId);
-    if (list is null || entry is null)
+    if (entry is null) return Results.NotFound();
+    var moveId = entry.EntryId;
+    var cart = await carts.GetAsync(userId, ct);
+    var added = false;
+    if (cart is null || !cart.AppliedWishListMoves.Contains(moveId))
     {
-        return Results.NotFound();
-    }
+        var lookup = await catalog.LookupProductAsync(productId, ct);
+        if (lookup.Status == ProductLookupStatus.Unavailable)
+            return Results.Json(new { error = "The catalog could not be reached right now. Please try again." }, statusCode: StatusCodes.Status503ServiceUnavailable);
+        if (lookup.Product is not { } product)
+            return Results.NotFound(new { error = $"Product '{productId}' is no longer available." });
 
-    var lookup = await catalog.LookupProductAsync(productId, ct);
-    if (lookup.Status == ProductLookupStatus.Unavailable)
+        (cart, added) = await ShoppingState.ChangeCartAsync(carts, userId, true, current =>
+        {
+            if (current.AppliedWishListMoves.Contains(moveId)) return StateChange.Unchanged;
+            CartLines.Add(current.Items, product.Id, product.Name, product.Price, 1);
+            current.AppliedWishListMoves.Add(moveId);
+            return StateChange.Changed;
+        }, ct);
+    }
+    list = await ShoppingState.ChangeWishListAsync(wishLists, userId, false, current =>
     {
-        return Results.Json(new { error = "The catalog could not be reached right now. Please try again." }, statusCode: StatusCodes.Status503ServiceUnavailable);
-    }
-
-    if (lookup.Product is not { } product)
-    {
-        return Results.NotFound(new { error = $"Product '{productId}' is no longer available." });
-    }
-
-    // Add to the cart first so a failure never loses the item from both places.
-    var cart = await carts.GetAsync(userId, ct) ?? CartLines.Empty(userId);
-    CartLines.Add(cart.Items, product.Id, product.Name, product.Price, 1);
-    await carts.UpsertAsync(cart, ct);
-    list.Items.Remove(entry);
-    await wishLists.UpsertAsync(list, ct);
-    await publisher.PublishAsync(Topics.CartItemAdded, userId, new { userId, productId = product.Id, Quantity = 1 }, ct);
+        var removed = current.Items.RemoveAll(i => i.EntryId == moveId);
+        return removed == 0 ? StateChange.Unchanged : StateChange.Changed;
+    }, ct) ?? new WishList { Id = userId, UserId = userId };
+    if (added)
+        await publisher.PublishAsync(Topics.CartItemAdded, userId, new { userId, productId, Quantity = 1 }, ct);
 
     return Results.Ok(new { wishList = await CartLines.ToViewAsync(list, catalog, ct), cart });
 });

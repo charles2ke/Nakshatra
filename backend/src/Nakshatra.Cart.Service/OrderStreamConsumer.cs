@@ -29,27 +29,17 @@ public class OrderStreamConsumer : EventConsumerBackgroundService
         }
 
         var repo = scopedServices.GetRequiredService<IDocumentRepository<Nakshatra.Shared.Models.Cart>>();
-        var cart = await repo.GetAsync(order.UserId, ct);
-        if (cart is null || cart.Items.Count == 0)
+        await ShoppingState.ChangeCartAsync(repo, order.UserId, false, cart =>
         {
-            return;
-        }
-
-        foreach (var line in order.Items)
-        {
-            var item = cart.Items.FirstOrDefault(i => i.ProductId == line.ProductId);
-            if (item is null)
+            if (cart.Items.Count == 0) return StateChange.Unchanged;
+            foreach (var line in order.Items)
             {
-                continue;
+                var item = cart.Items.FirstOrDefault(i => i.ProductId == line.ProductId);
+                if (item is null) continue;
+                item.Quantity -= line.Quantity;
+                if (item.Quantity <= 0) cart.Items.Remove(item);
             }
-
-            item.Quantity -= line.Quantity;
-            if (item.Quantity <= 0)
-            {
-                cart.Items.Remove(item);
-            }
-        }
-
-        await repo.UpsertAsync(cart, ct);
+            return StateChange.Changed;
+        }, ct);
     }
 }

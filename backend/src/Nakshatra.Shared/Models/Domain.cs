@@ -55,7 +55,15 @@ public class Product : IEntity
     /// <summary>Mean star rating of the product's reviews, maintained by the catalog service.</summary>
     public double AverageRating { get; set; }
     public int ReviewCount { get; set; }
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; } = DateTime.UnixEpoch;
+    [JsonIgnore]
+    public Dictionary<string, int> StockReleaseOperations { get; set; } = new();
+    [JsonIgnore]
+    public long BackInStockVersion { get; set; }
+    [JsonIgnore]
+    public string? BackInStockProductName { get; set; }
+    [JsonIgnore]
+    public int BackInStockQuantity { get; set; }
 
     public bool IsOnDeal() => ListPrice is { } listPrice && listPrice > Price;
 }
@@ -76,6 +84,10 @@ public class Cart : IEntity
     public List<CartItem> Items { get; set; } = new();
     /// <summary>Items set aside to buy later; they are not part of the subtotal or the checkout.</summary>
     public List<CartItem> SavedForLater { get; set; } = new();
+    [JsonIgnore]
+    public long? Revision { get; set; }
+    [JsonIgnore]
+    public List<string> AppliedWishListMoves { get; set; } = new();
     [BsonIgnore]
     public decimal Subtotal => Items.Sum(i => i.Price * i.Quantity);
 }
@@ -87,6 +99,8 @@ public class WishListItem
     /// <summary>Price when the item was added, so a later price drop can be pointed out.</summary>
     public decimal PriceWhenAdded { get; set; }
     public DateTime AddedAt { get; set; } = DateTime.UtcNow;
+    [JsonIgnore]
+    public string EntryId { get; set; } = string.Empty;
 }
 
 public class WishList : IEntity
@@ -95,6 +109,8 @@ public class WishList : IEntity
     public string Id { get; set; } = string.Empty;
     public string UserId { get; set; } = string.Empty;
     public List<WishListItem> Items { get; set; } = new();
+    [JsonIgnore]
+    public long? Revision { get; set; }
 }
 
 /// <summary>A saved shipping address in a customer's address book.</summary>

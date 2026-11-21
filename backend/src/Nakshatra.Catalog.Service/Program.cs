@@ -1,7 +1,6 @@
 using Nakshatra.Catalog.Service;
 using Nakshatra.Shared;
 using Nakshatra.Shared.Caching;
-using Nakshatra.Shared.Endpoints;
 using Nakshatra.Shared.Http;
 using Nakshatra.Shared.Models;
 using Nakshatra.Shared.Storage;
@@ -9,29 +8,17 @@ using Nakshatra.Shared.Storage;
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddNakshatraInfrastructure(builder.Configuration);
 builder.Services.AddHttpClient<OrderClient>();
-builder.Services.AddScoped<BackInStockNotifier>();
+builder.Services.AddSingleton<BackInStockNotifier>();
+builder.Services.AddHostedService<BackInStockRetryService>();
 builder.Services.AddSingleton<HelpfulVotes>();
+builder.Services.AddSingleton<QuestionAnswers>();
+builder.Services.AddSingleton<ProductRatings>();
+builder.Services.AddSingleton<CatalogProductWrites>();
 
 var app = builder.Build();
 app.UseNakshatraDefaults("catalog-service");
 
-// Product master data, read-through cached in Redis. Ratings are earned through reviews and the
-// creation date is fixed, so clients cannot set either.
-app.MapCachedCrud<Product>("/api/products", "product", CatalogRules.ProductTtl,
-    onCreate: product =>
-    {
-        product.AverageRating = 0;
-        product.ReviewCount = 0;
-        product.CreatedAt = DateTime.UtcNow;
-    },
-    onUpdate: (existing, incoming) =>
-    {
-        incoming.AverageRating = existing.AverageRating;
-        incoming.ReviewCount = existing.ReviewCount;
-        incoming.CreatedAt = existing.CreatedAt;
-    },
-    afterUpdate: (previous, saved, services, _) =>
-        services.GetRequiredService<BackInStockNotifier>().NotifyIfRestockedAsync(previous.Stock, saved));
+app.MapCatalogProducts();
 
 app.MapGet("/api/products/by-vendor/{vendorId}", async (string vendorId, IDocumentRepository<Product> repo) =>
     Results.Ok(await repo.FindAsync(p => p.VendorId == vendorId)));
@@ -51,37 +38,24 @@ app.MapGet("/api/products/categories", async (IDocumentRepository<Product> repo,
 });
 
 // Stock is decremented when an order is placed.
-app.MapPost("/api/products/{id}/reserve", async (string id, ReserveStockRequest request, IDocumentRepository<Product> repo, ICacheService cache) =>
+app.MapPost("/api/products/{id}/reserve", async (string id, ReserveStockRequest request, CatalogProductWrites products) =>
 {
     if (request.Quantity <= 0)
     {
         return Results.BadRequest(new { error = "Quantity must be greater than zero." });
     }
 
-    var product = await repo.GetAsync(id);
-    if (product is null)
-    {
-        return Results.NotFound();
-    }
-
-    if (product.Stock < request.Quantity)
-    {
-        return Results.Conflict(new { error = "Insufficient stock.", available = product.Stock });
-    }
-
-    product.Stock -= request.Quantity;
-    await repo.UpsertAsync(product);
-    await cache.RemoveAsync("product:all");
-    await cache.SetAsync($"product:{id}", product, CatalogRules.ProductTtl);
-    return Results.Ok(product);
+    var result = await products.AdjustAsync(id, -request.Quantity, null);
+    return result.Product is null ? Results.NotFound() :
+        result.Conflict ? Results.Conflict(new { error = "Insufficient stock.", available = result.Product.Stock }) :
+        Results.Ok(result.Product);
 });
 
 // Stock is returned when an order is cancelled, returned or could not be placed.
 app.MapPost("/api/products/{id}/release", async (
     string id,
     ReserveStockRequest request,
-    IDocumentRepository<Product> repo,
-    ICacheService cache,
+    CatalogProductWrites products,
     BackInStockNotifier backInStock) =>
 {
     if (request.Quantity <= 0)
@@ -89,19 +63,16 @@ app.MapPost("/api/products/{id}/release", async (
         return Results.BadRequest(new { error = "Quantity must be greater than zero." });
     }
 
-    var product = await repo.GetAsync(id);
-    if (product is null)
+    if (request.OperationId is not null && string.IsNullOrWhiteSpace(request.OperationId))
     {
-        return Results.NotFound();
+        return Results.BadRequest(new { error = "Operation id cannot be blank." });
     }
 
-    var previousStock = product.Stock;
-    product.Stock += request.Quantity;
-    await repo.UpsertAsync(product);
-    await cache.RemoveAsync("product:all");
-    await cache.SetAsync($"product:{id}", product, CatalogRules.ProductTtl);
-    await backInStock.NotifyIfRestockedAsync(previousStock, product);
-    return Results.Ok(product);
+    var result = await products.AdjustAsync(id, request.Quantity, request.OperationId);
+    if (result.Product is null) return Results.NotFound();
+    if (result.Conflict) return Results.Conflict(new { error = "The operation id was already used with a different quantity, or the stock would overflow." });
+    await backInStock.NotifyIfRestockedAsync(result.PreviousStock, result.Product);
+    return Results.Ok(result.Product);
 });
 
 // Product reviews. Review photos and videos are uploaded to the media service, which transcodes
@@ -115,6 +86,7 @@ app.MapPost("/api/products/{productId}/reviews", async (
     IDocumentRepository<Product> products,
     IDocumentRepository<Review> repo,
     ICacheService cache,
+    ProductRatings ratings,
     OrderClient orders,
     CancellationToken ct) =>
 {
@@ -137,7 +109,7 @@ app.MapPost("/api/products/{productId}/reviews", async (
     review.HelpfulCount = 0;
     await repo.UpsertAsync(review, ct);
     await cache.RemoveAsync($"reviews:{productId}");
-    await CatalogRules.RefreshRatingAsync(productId, products, repo, cache, ct);
+    await ratings.RefreshAsync(productId, ct);
     return Results.Created($"/api/products/{productId}/reviews/{review.Id}", review);
 });
 
@@ -205,18 +177,12 @@ app.MapPost("/api/products/{productId}/questions/{questionId}/answers", async (
     string productId,
     string questionId,
     AnswerQuestionRequest request,
-    IDocumentRepository<ProductQuestion> repo,
+    QuestionAnswers answers,
     CancellationToken ct) =>
 {
     if (ValidatePost(request.UserId, request.Text) is { } invalid)
     {
         return invalid;
-    }
-
-    var question = await repo.GetAsync(questionId, ct);
-    if (question is null || question.ProductId != productId)
-    {
-        return Results.NotFound(new { error = $"Question '{questionId}' was not found." });
     }
 
     var answer = new ProductAnswer
@@ -227,8 +193,12 @@ app.MapPost("/api/products/{productId}/questions/{questionId}/answers", async (
         // The portal has no sign-in, so like the rest of the demo the persona is taken from the client.
         IsSeller = string.Equals(request.Persona, nameof(Persona.Vendor), StringComparison.OrdinalIgnoreCase)
     };
-    question.Answers.Add(answer);
-    await repo.UpsertAsync(question, ct);
+    var question = await answers.AppendAsync(productId, questionId, answer, ct);
+    if (question is null)
+    {
+        return Results.NotFound(new { error = $"Question '{questionId}' was not found." });
+    }
+
     return Results.Created($"/api/products/{productId}/questions/{questionId}/answers/{answer.Id}", question);
 });
 
@@ -261,8 +231,10 @@ app.MapPost("/api/products/{productId}/stock-alerts", async (
     var alert = await alerts.GetAsync(alertId, ct);
     if (alert is null)
     {
-        alert = new StockAlert { Id = alertId, ProductId = productId, UserId = userId };
-        await alerts.UpsertAsync(alert, ct);
+        alert = new StockAlert { Id = alertId, ProductId = productId, UserId = userId,
+            SubscribedVersion = product.BackInStockVersion, NotificationId = Guid.NewGuid().ToString("N") };
+        if (!await alerts.TryCreateAsync(alert, ct))
+            alert = await alerts.GetAsync(alertId, ct) ?? alert;
     }
 
     return Results.Ok(alert);
@@ -287,6 +259,7 @@ app.MapDelete("/api/products/{productId}/stock-alerts/{userId}", async (
 
 await SeedData.SeedAsync(app.Services, SeedData.Products);
 await SeedData.SeedAsync(app.Services, SeedData.Reviews);
+await app.Services.GetRequiredService<ProductRatings>().BackfillAsync();
 app.Run();
 
 static IResult? ValidatePost(string? userId, string? text)
@@ -302,6 +275,6 @@ static IResult? ValidatePost(string? userId, string? text)
         : null;
 }
 
-public record ReserveStockRequest(int Quantity);
+public record ReserveStockRequest(int Quantity, string? OperationId = null);
 
 public partial class Program;

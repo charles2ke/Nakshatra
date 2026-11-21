@@ -15,5 +15,7 @@ public interface IDocumentRepository<T> where T : class, IEntity
     Task<IReadOnlyList<T>> FindAsync(Expression<Func<T, bool>> predicate, CancellationToken ct = default);
     Task<T> UpsertAsync(T entity, CancellationToken ct = default);
     Task<bool> TryCreateAsync(T entity, CancellationToken ct = default);
+    /// <summary>Replaces an existing document only when the predicate still matches.</summary>
+    Task<bool> TryReplaceAsync(Expression<Func<T, bool>> predicate, T entity, CancellationToken ct = default);
     Task<bool> DeleteAsync(string id, CancellationToken ct = default);
 }

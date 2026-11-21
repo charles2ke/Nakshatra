@@ -47,6 +47,11 @@ public static partial class Coupons
 
     public static string? Validate(CouponRequest request)
     {
+        if (request.Kind is { } kind && !Enum.IsDefined(kind))
+        {
+            return $"Unknown coupon kind '{kind}'.";
+        }
+
         if (request.Value is not > 0)
         {
             return "The coupon value must be greater than zero.";
