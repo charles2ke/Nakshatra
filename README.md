@@ -157,6 +157,18 @@ Every service reads configuration from `appsettings.json` and environment variab
 | `Notifications__Twilio__*` | Twilio SMS delivery; omitted ⇒ in-app feed only |
 | `Notifications__Webhook__Url`, `__Token` | Outbound webhook delivery; omitted ⇒ in-app feed only |
 
+Address books migrate lazily from the legacy `addresses` collection into one
+`addressbookdocuments` document per user. If legacy data has multiple defaults, the newest
+default is kept; if it has none, the newest address becomes the default. The new document is
+authoritative even when empty, and legacy documents are retained. Stop all old user-service
+instances before deploying this change: old instances still write the legacy collection, and
+rolling back requires explicitly migrating the new documents back. MongoDB writes use majority
+acknowledgement; the in-memory fallback is shared only within one process. MongoDB's 16 MiB
+document limit applies to each address book.
+
+To run the address-book tests against MongoDB as well as the in-memory store, set
+`NAKSHATRA_TEST_MONGO` to a MongoDB connection string before running `dotnet test`.
+
 ## External integrations
 
 Third-party providers sit behind interfaces and are enabled by configuration, so the stack still

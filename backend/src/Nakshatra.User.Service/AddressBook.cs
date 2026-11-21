@@ -1,5 +1,4 @@
 using Nakshatra.Shared.Models;
-using Nakshatra.Shared.Storage;
 
 namespace Nakshatra.User.Service;
 
@@ -58,29 +57,24 @@ public static class AddressBook
     public static List<Address> Ordered(IEnumerable<Address> addresses) =>
         addresses.OrderByDescending(a => a.IsDefault).ThenByDescending(a => a.CreatedAt).ToList();
 
-    public static async Task MakeDefaultAsync(IDocumentRepository<Address> repo, Address address, CancellationToken ct)
+    public static void MakeDefault(List<Address> addresses, Address address)
     {
-        foreach (var other in await repo.FindAsync(a => a.UserId == address.UserId && a.Id != address.Id && a.IsDefault, ct))
+        foreach (var other in addresses)
         {
-            other.IsDefault = false;
-            await repo.UpsertAsync(other, ct);
+            other.IsDefault = other.Id == address.Id;
         }
-
-        address.IsDefault = true;
-        await repo.UpsertAsync(address, ct);
     }
 
     /// <summary>After the default address is deleted, the most recently added remaining address takes over.</summary>
-    public static async Task PromoteNewestAsync(IDocumentRepository<Address> repo, string userId, CancellationToken ct)
+    public static void Normalize(List<Address> addresses)
     {
-        var remaining = await repo.FindAsync(a => a.UserId == userId, ct);
-        if (remaining.Count == 0 || remaining.Any(a => a.IsDefault))
+        if (addresses.Count == 0)
         {
             return;
         }
 
-        var newest = remaining.OrderByDescending(a => a.CreatedAt).First();
-        newest.IsDefault = true;
-        await repo.UpsertAsync(newest, ct);
+        var selected = addresses.OrderByDescending(a => a.IsDefault)
+            .ThenByDescending(a => a.CreatedAt).ThenBy(a => a.Id, StringComparer.Ordinal).First();
+        MakeDefault(addresses, selected);
     }
 }

@@ -6,6 +6,7 @@ using Nakshatra.User.Service;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddNakshatraInfrastructure(builder.Configuration);
+builder.Services.AddSingleton<AddressBookStore>();
 
 var app = builder.Build();
 app.UseNakshatraDefaults("user-service");
@@ -30,21 +31,21 @@ app.MapGet("/api/users/by-persona/{persona}", async (string persona, IDocumentRe
 // Saved shipping addresses used at checkout.
 var addresses = app.MapGroup("/api/users/{userId}/addresses");
 
-addresses.MapGet("", async (string userId, IDocumentRepository<User> users, IDocumentRepository<Address> repo, CancellationToken ct) =>
+addresses.MapGet("", async (string userId, IDocumentRepository<User> users, AddressBookStore books, CancellationToken ct) =>
 {
     if (await users.GetAsync(userId, ct) is null)
     {
         return Results.NotFound(new { error = $"User '{userId}' was not found." });
     }
 
-    return Results.Ok(AddressBook.Ordered(await repo.FindAsync(a => a.UserId == userId, ct)));
+    return Results.Ok(await books.ListAsync(userId, ct));
 });
 
 addresses.MapPost("", async (
     string userId,
     AddressRequest request,
     IDocumentRepository<User> users,
-    IDocumentRepository<Address> repo,
+    AddressBookStore books,
     CancellationToken ct) =>
 {
     if (AddressBook.Validate(request) is { } error)
@@ -57,18 +58,7 @@ addresses.MapPost("", async (
         return Results.NotFound(new { error = $"User '{userId}' was not found." });
     }
 
-    var address = new Address { UserId = userId };
-    AddressBook.Apply(address, request);
-    var isFirst = (await repo.FindAsync(a => a.UserId == userId, ct)).Count == 0;
-    if (isFirst || request.IsDefault == true)
-    {
-        await AddressBook.MakeDefaultAsync(repo, address, ct);
-    }
-    else
-    {
-        await repo.UpsertAsync(address, ct);
-    }
-
+    var address = (await books.CreateAsync(userId, request, ct))!;
     return Results.Created($"/api/users/{userId}/addresses/{address.Id}", address);
 });
 
@@ -76,7 +66,7 @@ addresses.MapPut("/{addressId}", async (
     string userId,
     string addressId,
     AddressRequest request,
-    IDocumentRepository<Address> repo,
+    AddressBookStore books,
     CancellationToken ct) =>
 {
     if (AddressBook.Validate(request) is { } error)
@@ -84,50 +74,31 @@ addresses.MapPut("/{addressId}", async (
         return Results.BadRequest(new { error });
     }
 
-    var address = await repo.GetAsync(addressId, ct);
-    if (address is null || address.UserId != userId)
+    var address = await books.EditAsync(userId, addressId, request, ct);
+    if (address is null)
     {
         return Results.NotFound();
-    }
-
-    AddressBook.Apply(address, request);
-    // The default can be moved to this address but not simply removed, so the book always has one.
-    if (request.IsDefault == true)
-    {
-        await AddressBook.MakeDefaultAsync(repo, address, ct);
-    }
-    else
-    {
-        await repo.UpsertAsync(address, ct);
     }
 
     return Results.Ok(address);
 });
 
-addresses.MapPost("/{addressId}/default", async (string userId, string addressId, IDocumentRepository<Address> repo, CancellationToken ct) =>
+addresses.MapPost("/{addressId}/default", async (string userId, string addressId, AddressBookStore books, CancellationToken ct) =>
 {
-    var address = await repo.GetAsync(addressId, ct);
-    if (address is null || address.UserId != userId)
+    var address = await books.SetDefaultAsync(userId, addressId, ct);
+    if (address is null)
     {
         return Results.NotFound();
     }
 
-    await AddressBook.MakeDefaultAsync(repo, address, ct);
     return Results.Ok(address);
 });
 
-addresses.MapDelete("/{addressId}", async (string userId, string addressId, IDocumentRepository<Address> repo, CancellationToken ct) =>
+addresses.MapDelete("/{addressId}", async (string userId, string addressId, AddressBookStore books, CancellationToken ct) =>
 {
-    var address = await repo.GetAsync(addressId, ct);
-    if (address is null || address.UserId != userId)
+    if (!await books.DeleteAsync(userId, addressId, ct))
     {
         return Results.NotFound();
-    }
-
-    await repo.DeleteAsync(addressId, ct);
-    if (address.IsDefault)
-    {
-        await AddressBook.PromoteNewestAsync(repo, userId, ct);
     }
 
     return Results.NoContent();
