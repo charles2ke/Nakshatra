@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getCart, removeFromCart, updateCartItem, saveForLater, moveSavedToCart, removeSaved, errorMessage } from '../api/client';
 import type { Cart } from '../api/client';
@@ -9,52 +9,59 @@ import { useToast } from '../hooks/useToast';
 
 export default function CartPage() {
   const { currentUser } = usePersona();
+  return <CartContents key={currentUser ? `${currentUser.id}:${currentUser.persona}` : ''} />;
+}
+
+function CartContents() {
+  const { currentUser } = usePersona();
   const { t, formatCurrency, formatNumber } = useLocale();
   const { syncCart } = useBadges();
   const [cart, setCart] = useState<Cart | null>(null);
-  const pendingQuantityItems = useRef(new Set<string>());
-  const [pendingQuantityProductIds, setPendingQuantityProductIds] = useState<Set<string>>(() => new Set());
+  const mutationPending = useRef(false);
+  const [busy, setBusy] = useState(false);
+  const active = useRef(false);
+  const version = useRef(0);
   const navigate = useNavigate();
   const { toast, showToast } = useToast();
-  const [movingProductId, setMovingProductId] = useState<string | null>(null);
+
+  useLayoutEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
 
   useEffect(() => {
-    if (currentUser) getCart(currentUser.id).then(c => { setCart(c); syncCart(c); }).catch(() => {});
+    const readVersion = version.current;
+    let current = true;
+    if (currentUser) getCart(currentUser.id).then(c => {
+      if (current && version.current === readVersion) { setCart(c); syncCart(c); }
+    }).catch(() => {});
+    return () => { current = false; };
   }, [currentUser, syncCart]);
 
-  async function handleQuantity(productId: string, quantity: number) {
-    if (!currentUser || quantity < 1 || pendingQuantityItems.current.has(productId)) return;
-    pendingQuantityItems.current.add(productId);
-    setPendingQuantityProductIds(new Set(pendingQuantityItems.current));
+  async function mutate(action: (userId: string) => Promise<Cart>, doneKey?: string) {
+    if (!currentUser || mutationPending.current) return;
+    mutationPending.current = true;
+    version.current++;
+    setBusy(true);
     try {
-      const updated = await updateCartItem(currentUser.id, productId, quantity);
+      const updated = await action(currentUser.id);
+      if (!active.current) return;
       setCart(updated);
       syncCart(updated);
-    } catch { /* keep the current cart on failure */ }
+      if (doneKey) showToast(t(doneKey));
+    } catch (e) { if (active.current) showToast(errorMessage(e)); }
     finally {
-      pendingQuantityItems.current.delete(productId);
-      setPendingQuantityProductIds(new Set(pendingQuantityItems.current));
+      mutationPending.current = false;
+      if (active.current) setBusy(false);
     }
   }
 
-  async function handleRemove(productId: string) {
-    if (!currentUser) return;
-    const updated = await removeFromCart(currentUser.id, productId);
-    setCart(updated);
-    syncCart(updated);
+  function handleQuantity(productId: string, quantity: number) {
+    if (quantity >= 1) void mutate(userId => updateCartItem(userId, productId, quantity));
   }
 
-  // Moves an item between the cart and the saved-for-later list; one move at a time.
-  async function handleMove(productId: string, move: (userId: string, productId: string) => Promise<Cart>, doneKey: string) {
-    if (!currentUser || movingProductId) return;
-    setMovingProductId(productId);
-    try {
-      const updated = await move(currentUser.id, productId);
-      setCart(updated);
-      syncCart(updated);
-      showToast(t(doneKey));
-    } catch (e) { showToast(errorMessage(e)); }
-    finally { setMovingProductId(null); }
+  function handleMove(productId: string, move: (userId: string, productId: string) => Promise<Cart>, doneKey: string) {
+    void mutate(userId => move(userId, productId), doneKey);
   }
 
   if (!currentUser) return <div>{t('cart.noUser')}</div>;
@@ -73,7 +80,6 @@ export default function CartPage() {
               <thead><tr><th>{t('cart.col.product')}</th><th>{t('cart.col.price')}</th><th>{t('cart.col.qty')}</th><th>{t('cart.col.action')}</th></tr></thead>
               <tbody>
                 {cart.items.map(item => {
-                  const isQuantityPending = pendingQuantityProductIds.has(item.productId);
                   return (
                     <tr key={item.productId} data-testid={`cart-item-${item.productId}`}>
                       <td>{item.name}</td>
@@ -83,25 +89,25 @@ export default function CartPage() {
                           <button
                             data-testid={`qty-decrease-${item.productId}`}
                             onClick={() => handleQuantity(item.productId, item.quantity - 1)}
-                            disabled={item.quantity <= 1 || isQuantityPending}
+                            disabled={item.quantity <= 1 || busy}
                             aria-label={t('cart.decrease')}
                           >-</button>
                           <span data-testid={`qty-${item.productId}`}>{item.quantity}</span>
                           <button
                             data-testid={`qty-increase-${item.productId}`}
                             onClick={() => handleQuantity(item.productId, item.quantity + 1)}
-                            disabled={isQuantityPending}
+                            disabled={busy}
                             aria-label={t('cart.increase')}
                           >+</button>
                         </div>
                       </td>
                       <td>
                         <div className="row-actions">
-                          <button data-testid={`remove-${item.productId}`} onClick={() => handleRemove(item.productId)}>{t('cart.remove')}</button>
+                          <button data-testid={`remove-${item.productId}`} disabled={busy} onClick={() => mutate(userId => removeFromCart(userId, item.productId))}>{t('cart.remove')}</button>
                           <button
                             className="btn-secondary"
                             data-testid={`save-for-later-${item.productId}`}
-                            disabled={movingProductId !== null}
+                            disabled={busy}
                             onClick={() => handleMove(item.productId, saveForLater, 'cart.savedToast')}
                           >{t('cart.saveForLater')}</button>
                         </div>
@@ -113,7 +119,7 @@ export default function CartPage() {
             </table>
           </div>
           <div id="cart-subtotal" data-testid="cart-subtotal">{t('cart.subtotal')}: {formatCurrency(cart.subtotal, 'INR')}</div>
-          <button data-testid="checkout-btn" onClick={() => navigate('/checkout')} className="btn-primary">{t('cart.checkout')}</button>
+          <button data-testid="checkout-btn" disabled={busy} onClick={() => navigate('/checkout')} className="btn-primary">{t('cart.checkout')}</button>
         </>
       )}
       <div className="toast-region" role="status" aria-live="polite">
@@ -130,13 +136,13 @@ export default function CartPage() {
                 <button
                   className="btn-primary"
                   data-testid={`move-to-cart-${item.productId}`}
-                  disabled={movingProductId !== null}
+                  disabled={busy}
                   onClick={() => handleMove(item.productId, moveSavedToCart, 'cart.movedToast')}
                 >{t('cart.moveToCart')}</button>
                 <button
                   className="btn-secondary"
                   data-testid={`remove-saved-${item.productId}`}
-                  disabled={movingProductId !== null}
+                  disabled={busy}
                   onClick={() => handleMove(item.productId, removeSaved, 'cart.removedSavedToast')}
                 >{t('cart.remove')}</button>
               </li>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getWishList, removeFromWishList, moveWishListItemToCart, errorMessage } from '../api/client';
 import type { WishList, WishListEntry } from '../api/client';
@@ -10,6 +10,11 @@ import { useToast } from '../hooks/useToast';
 
 export default function WishlistPage() {
   const { currentUser } = usePersona();
+  return <Wishlist key={currentUser ? `${currentUser.id}:${currentUser.persona}` : ''} />;
+}
+
+function Wishlist() {
+  const { currentUser } = usePersona();
   const { t, formatCurrency, formatDate } = useLocale();
   const { syncCart } = useBadges();
   const { toast, showToast } = useToast();
@@ -17,6 +22,12 @@ export default function WishlistPage() {
   const [loaded, setLoaded] = useState<{ userId: string; list: WishList | null } | null>(null);
   const [busyProductId, setBusyProductId] = useState<string | null>(null);
   const userId = currentUser?.id;
+  const active = useRef(false);
+
+  useLayoutEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
 
   useEffect(() => {
     if (!userId) return;
@@ -37,11 +48,12 @@ export default function WishlistPage() {
     setBusyProductId(item.productId);
     try {
       const res = await moveWishListItemToCart(currentUser.id, item.productId);
+      if (!active.current) return;
       setLoaded({ userId: currentUser.id, list: res.wishList });
       syncCart(res.cart);
       showToast(t('wishlist.movedToast', { name: item.name }));
-    } catch (e) { showToast(errorMessage(e)); }
-    finally { setBusyProductId(null); }
+    } catch (e) { if (active.current) showToast(errorMessage(e)); }
+    finally { if (active.current) setBusyProductId(null); }
   }
 
   async function handleRemove(item: WishListEntry) {
@@ -49,10 +61,11 @@ export default function WishlistPage() {
     setBusyProductId(item.productId);
     try {
       const updated = await removeFromWishList(currentUser.id, item.productId);
+      if (!active.current) return;
       setLoaded({ userId: currentUser.id, list: updated });
       showToast(t('wishlist.removedToast', { name: item.name }));
-    } catch (e) { showToast(errorMessage(e)); }
-    finally { setBusyProductId(null); }
+    } catch (e) { if (active.current) showToast(errorMessage(e)); }
+    finally { if (active.current) setBusyProductId(null); }
   }
 
   return (

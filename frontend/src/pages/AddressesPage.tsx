@@ -22,6 +22,11 @@ const FIELDS: { key: Exclude<keyof AddressInput, 'isDefault'>; testId: string; r
 
 export default function AddressesPage() {
   const { currentUser } = usePersona();
+  return <AddressBook key={currentUser?.id ?? ''} />;
+}
+
+function AddressBook() {
+  const { currentUser } = usePersona();
   const { t } = useLocale();
   const { toast, showToast } = useToast();
   // Remembers whose book it is, so switching persona never shows the previous user's addresses.
