@@ -100,7 +100,7 @@ public class OrderCreatedTracker : EventConsumerBackgroundService
             $"Order placed with {order.Items.Count} line(s).",
             "nakshatra.com",
             "customer",
-            order.EstimatedDelivery ?? DateTime.UtcNow.AddDays(5),
+            order.EstimatedDelivery ?? DateTime.UtcNow.Date.AddDays(5),
             ct);
     }
 }
