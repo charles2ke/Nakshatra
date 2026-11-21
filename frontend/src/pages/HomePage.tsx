@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { searchProducts, addToCart } from '../api/client';
 import type { Product, SearchResult } from '../api/client';
 import ProductCard from '../components/ProductCard';
@@ -8,6 +9,7 @@ import { usePersona } from '../context/PersonaContext';
 import { useBadges } from '../context/BadgeContext';
 import { useLocale } from '../i18n/LocaleContext';
 import { useToast } from '../hooks/useToast';
+import { useRecentlyViewed } from '../hooks/useRecentlyViewed';
 
 export default function HomePage() {
   const { currentUser } = usePersona();
@@ -17,6 +19,8 @@ export default function HomePage() {
   const [result, setResult] = useState<SearchResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [recs, setRecs] = useState<Product[]>([]);
+  const [deals, setDeals] = useState<Product[]>([]);
+  const recentlyViewed = useRecentlyViewed(currentUser?.id);
   const { toast, showToast } = useToast();
 
   async function doSearch(q: string) {
@@ -29,6 +33,14 @@ export default function HomePage() {
   }
 
   useEffect(() => { doSearch(''); }, []);
+
+  useEffect(() => {
+    let current = true;
+    searchProducts({ deals: true, pageSize: 8 })
+      .then(r => { if (current) setDeals(r.items); })
+      .catch(() => {});
+    return () => { current = false; };
+  }, []);
 
   async function handleAddToCart(p: Product) {
     if (!currentUser) { showToast(t('home.addToCartNoUser')); return; }
@@ -58,6 +70,9 @@ export default function HomePage() {
       <div className="toast-region" role="status" aria-live="polite">
         {toast && <div className="toast" data-testid="cart-toast">{toast}</div>}
       </div>
+      <RecommendationStrip products={deals} titleKey="home.deals" testId="deals-strip">
+        <Link to="/search?deals=true" className="section-link" data-testid="deals-see-all">{t('home.seeAllDeals')}</Link>
+      </RecommendationStrip>
       {loading && (
         <div className="skeleton-grid" data-testid="loading" role="status" aria-label={t('home.loading')}>
           {Array.from({ length: 8 }, (_, i) => <div key={i} className="skeleton-card" />)}
@@ -74,6 +89,7 @@ export default function HomePage() {
         </div>
       )}
       <RecommendationStrip products={recs} />
+      <RecommendationStrip products={recentlyViewed} titleKey="home.recentlyViewed" testId="recently-viewed-strip" />
     </div>
   );
 }

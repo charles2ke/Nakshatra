@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
 using Nakshatra.Notification.Service;
 using Nakshatra.Shared;
 using Nakshatra.Shared.Messaging;
@@ -134,6 +135,48 @@ public class SupplyChainAndNotificationTests : IClassFixture<NotificationHostFix
         var envelope = new EventEnvelope(Topics.CartItemAdded, "cart-1", "{}");
 
         Assert.Null(NotificationComposer.Compose(envelope));
+    }
+
+    [Fact]
+    public void Composer_emails_back_in_stock_alerts_to_the_subscriber()
+    {
+        var envelope = new EventEnvelope(
+            Topics.ProductsBackInStock,
+            "prod-lamp",
+            JsonSerializer.Serialize(new { productId = "prod-lamp", productName = "Desk Lamp", userId = "user-1", stock = 3 }));
+
+        var notification = NotificationComposer.Compose(envelope);
+
+        Assert.Equal(("user-1", "prod-lamp", NotificationChannel.Email), (notification!.UserId, notification.Reference, notification.Channel));
+        Assert.Contains("Desk Lamp", notification.Body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Supply_chain_tracks_returns_and_the_promised_delivery_date()
+    {
+        using var supplyChain = TestHosts.Create<Nakshatra.SupplyChain.Service.ServiceMarker>();
+        using var client = supplyChain.CreateClient();
+        var events = supplyChain.Services.GetRequiredService<IEventPublisher>();
+        var promised = new DateTime(2030, 1, 2, 0, 0, 0, DateTimeKind.Utc);
+        var order = new Nakshatra.Shared.Models.Order
+        {
+            UserId = $"user-{Guid.NewGuid():N}",
+            EstimatedDelivery = promised,
+            Items = { new Nakshatra.Shared.Models.CartItem { ProductId = "p-1", Quantity = 1 } }
+        };
+
+        await events.PublishAsync(Topics.OrdersCreated, order.Id, order);
+        order.Status = Nakshatra.Shared.Models.OrderStatus.ReturnRequested;
+        await events.PublishAsync(Topics.OrdersStatusChanged, order.Id, order);
+        order.Status = Nakshatra.Shared.Models.OrderStatus.Returned;
+        await events.PublishAsync(Topics.OrdersStatusChanged, order.Id, order);
+        var trace = await client.GetFromJsonAsync<JsonElement>($"/api/supplychain/traces/{order.Id}", ServiceDefaults.JsonOptions);
+
+        Assert.Equal(promised, trace.GetProperty("estimatedDelivery").GetDateTime());
+        Assert.Equal("Returned", trace.GetProperty("currentStage").GetString());
+        Assert.Equal(
+            new[] { "OrderPlaced", "ReturnRequested", "Returned" },
+            trace.GetProperty("events").EnumerateArray().Select(e => e.GetProperty("stage").GetString()));
     }
 
     [Fact]

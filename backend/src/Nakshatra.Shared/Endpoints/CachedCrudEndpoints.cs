@@ -18,7 +18,9 @@ public static class CachedCrudEndpoints
         string route,
         string cachePrefix,
         TimeSpan? ttl = null,
-        Action<T>? onCreate = null)
+        Action<T>? onCreate = null,
+        Action<T, T>? onUpdate = null,
+        Func<T, T, IServiceProvider, CancellationToken, Task>? afterUpdate = null)
         where T : class, IEntity
     {
         var cacheTtl = ttl ?? TimeSpan.FromMinutes(10);
@@ -51,7 +53,9 @@ public static class CachedCrudEndpoints
             return Results.Created($"{route}/{saved.Id}", saved);
         });
 
-        group.MapPut("/{id}", async (string id, T entity, IDocumentRepository<T> repo, ICacheService cache) =>
+        // onUpdate(existing, incoming) runs before the save, e.g. to keep server-maintained fields;
+        // afterUpdate(previous, saved, services, ct) runs once the change is stored.
+        group.MapPut("/{id}", async (string id, T entity, IDocumentRepository<T> repo, ICacheService cache, HttpContext context) =>
         {
             var existing = await repo.GetAsync(id);
             if (existing is null)
@@ -60,9 +64,15 @@ public static class CachedCrudEndpoints
             }
 
             entity.Id = id;
+            onUpdate?.Invoke(existing, entity);
             var saved = await repo.UpsertAsync(entity);
             await cache.RemoveAsync(listKey);
             await cache.SetAsync($"{cachePrefix}:{id}", saved, cacheTtl);
+            if (afterUpdate is not null)
+            {
+                await afterUpdate(existing, saved, context.RequestServices, context.RequestAborted);
+            }
+
             return Results.Ok(saved);
         });
 

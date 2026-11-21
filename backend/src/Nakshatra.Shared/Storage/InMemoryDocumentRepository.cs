@@ -51,4 +51,18 @@ public class InMemoryDocumentRepository<T> : IDocumentRepository<T> where T : cl
 
     public Task<bool> DeleteAsync(string id, CancellationToken ct = default)
         => Task.FromResult(_items.TryRemove(id, out _));
+
+    public Task<bool> TryReplaceAsync(Expression<Func<T, bool>> predicate, T entity, CancellationToken ct = default)
+    {
+        var matches = predicate.Compile();
+        while (_items.TryGetValue(entity.Id, out var current) && matches(current))
+        {
+            if (_items.TryUpdate(entity.Id, entity, current))
+            {
+                return Task.FromResult(true);
+            }
+        }
+
+        return Task.FromResult(false);
+    }
 }

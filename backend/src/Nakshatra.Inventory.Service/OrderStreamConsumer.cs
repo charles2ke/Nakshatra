@@ -69,7 +69,8 @@ public class OrderStreamConsumer : EventConsumerBackgroundService
 
 /// <summary>
 /// Reverses the recorded sale when an order is cancelled on <c>orders.status-changed</c> before it
-/// shipped, so on-hand stock is restored and the forecast is not inflated by demand that never left.
+/// shipped, or when a return is completed and the goods are back on the shelf, so on-hand stock is
+/// restored and the forecast is not inflated by demand that was undone.
 /// </summary>
 public class CancelledOrderStreamConsumer : EventConsumerBackgroundService
 {
@@ -85,7 +86,13 @@ public class CancelledOrderStreamConsumer : EventConsumerBackgroundService
     protected override async Task HandleAsync(EventEnvelope envelope, IServiceProvider scopedServices, CancellationToken ct)
     {
         var order = envelope.As<Order>();
-        if (order is not { Status: OrderStatus.Cancelled } || order.HasShipped())
+        var undoesSale = order switch
+        {
+            { Status: OrderStatus.Returned } => true,
+            { Status: OrderStatus.Cancelled } => !order.HasShipped(),
+            _ => false
+        };
+        if (order is null || !undoesSale)
         {
             return;
         }

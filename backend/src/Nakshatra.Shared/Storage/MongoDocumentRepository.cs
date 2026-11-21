@@ -61,4 +61,10 @@ public class MongoDocumentRepository<T> : IDocumentRepository<T> where T : class
         var result = await _collection.DeleteOneAsync(x => x.Id == id, ct);
         return result.DeletedCount > 0;
     }
+
+    public async Task<bool> TryReplaceAsync(Expression<Func<T, bool>> predicate, T entity, CancellationToken ct = default)
+    {
+        var result = await _collection.ReplaceOneAsync(predicate, entity, cancellationToken: ct);
+        return result.MatchedCount == 1;
+    }
 }

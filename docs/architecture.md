@@ -141,20 +141,20 @@ Ports shown are the local development ports (`launchSettings.json`, and the gate
 | Service | Responsibility | Key endpoints | Publishes | Consumes |
 |---------|----------------|---------------|-----------|----------|
 | **Gateway** | Single ingress, CORS, `/api/*` routing to the owning service | `/health`, `/api/**` | — | — |
-| **User** | Users and personas | `/api/users`, `/api/personas`, `/api/users/by-persona/{persona}` | — | — |
+| **User** | Users and personas; per-user address books with one default address | `/api/users`, `/api/personas`, `/api/users/by-persona/{persona}`, `/api/users/{userId}/addresses` (`/{addressId}`, `/{addressId}/default`) | — | — |
 | **Vendor** | Vendor master data | `/api/vendors` | — | — |
-| **Catalog** | Product master data, stock reservation and release, reviews | `/api/products`, `/api/products/{id}/reserve`, `/api/products/{id}/release`, `/api/products/categories`, `/api/products/{id}/reviews` | — | — |
-| **Search** | Keyword search, filtering, paging and type-ahead over catalog data | `/api/search`, `/api/search/suggest` | — | — |
-| **Cart** | Per-user cart lines; ordered lines are removed once the order is placed | `/api/cart/{userId}` and item add/update/remove | `cart.item-added` | `orders.created` |
+| **Catalog** | Product master data (list price for deals, rating aggregates), stock reservation and release, reviews (verified purchase checked against the order service, helpful votes), customer questions and answers, back-in-stock alerts | `/api/products`, `/api/products/{id}/reserve`, `/api/products/{id}/release`, `/api/products/categories`, `/api/products/{id}/reviews`, `.../reviews/{reviewId}/helpful`, `/api/products/{id}/questions`, `.../questions/{questionId}/answers`, `/api/products/{id}/stock-alerts` | `products.back-in-stock` | — |
+| **Search** | Keyword search, filtering (including minimum rating, in stock and deals), sorting (relevance, price, rating, newest), paging and type-ahead over catalog data | `/api/search`, `/api/search/suggest` | — | — |
+| **Cart** | Per-user cart lines, saved-for-later lines and wish lists; ordered lines are removed once the order is placed, except for Buy Now orders, which never came from the cart | `/api/cart/{userId}` and item add/update/remove, `.../items/{productId}/save-for-later`, `.../saved/{productId}/move-to-cart`, `/api/wishlist/{userId}` | `cart.item-added` | `orders.created` |
 | **Recommendation** | Co-purchase graph, "also purchased", basket recommendations | `/api/recommendations/also-purchased/{productId}`, `/api/recommendations/basket` | — | `orders.created` |
-| **Order** | Order creation with all-or-nothing stock reservation, pricing (subtotal + tax), status transitions, cancellation (releases stock until the order ships) | `/api/orders`, `/api/orders/{id}/status`, `/api/orders/{id}/cancel` | `orders.created`, `orders.status-changed` | `payments.completed` |
-| **Payment** | Authorization and refunds through Stripe, or a simulated gateway when no provider is configured; payments are checked against the order, and captured payments are refunded when an order is cancelled | `/api/payments`, `/api/payments/{id}/refund` | `payments.completed` | `orders.status-changed` |
-| **Billing** | Invoices derived from orders and payments | `/api/billing/invoices` | — | `orders.created`, `payments.completed` |
+| **Order** | Order creation with all-or-nothing stock reservation, pricing (coupon discount, delivery fee, gift wrap and tax), delivery speeds with estimated delivery dates, coupons, status transitions, cancellation (releases stock until the order ships), returns within 30 days of delivery | `/api/orders`, `/api/orders/quote`, `/api/orders/{id}/status`, `/api/orders/{id}/cancel`, `/api/orders/{id}/return`, `/api/orders/{id}/return/complete`, `/api/coupons` | `orders.created`, `orders.status-changed` | `payments.completed` |
+| **Payment** | Authorization and refunds through Stripe, or a simulated gateway when no provider is configured; payments are checked against the order, and captured payments are refunded when an order is cancelled or returned | `/api/payments`, `/api/payments/{id}/refund` | `payments.completed` | `orders.status-changed` |
+| **Billing** | Invoices derived from orders and payments, with discount, shipping and gift-wrap lines | `/api/billing/invoices` | — | `orders.created`, `payments.completed` |
 | **Fulfillment** | Shipments and their stage transitions; only paid, non-cancelled orders advance | `/api/fulfillment/shipments`, `.../advance` | — | `orders.created`, `orders.status-changed` |
-| **Inventory** | Stock levels, adjustments, replenishment, demand forecasting, reorder suggestions | `/api/inventory`, `.../adjust`, `.../replenish`, `.../forecast`, `/api/inventory/reorder-suggestions` | `inventory.adjusted`, `inventory.low`, `inventory.replenishment-ordered` | `orders.created`, `orders.status-changed` |
-| **SupplyChain** | End-to-end traceability of orders and replenishments | `/api/supplychain/traces`, `/api/supplychain/stages` | `supplychain.event-recorded` | `orders.created`, `orders.status-changed`, `inventory.replenishment-ordered` |
+| **Inventory** | Stock levels, adjustments, replenishment, demand forecasting, reorder suggestions; a sale is reversed when its order is cancelled before shipping or returned | `/api/inventory`, `.../adjust`, `.../replenish`, `.../forecast`, `/api/inventory/reorder-suggestions` | `inventory.adjusted`, `inventory.low`, `inventory.replenishment-ordered` | `orders.created`, `orders.status-changed` |
+| **SupplyChain** | End-to-end traceability of orders (including return stages) and replenishments | `/api/supplychain/traces`, `/api/supplychain/stages` | `supplychain.event-recorded` | `orders.created`, `orders.status-changed`, `inventory.replenishment-ordered` |
 | **Media** | Uploads, sandboxed storage, background transcoding into renditions | `/api/media`, `/api/media/{id}/renditions/{rendition}` | `media.uploaded`, `media.transcoded` | `media.uploaded` |
-| **Notification** | Per-user notification inbox fed by domain events, delivered over email/SMS/webhooks | `/api/notifications`, `.../read`, `.../read-all` | — | `orders.created`, `orders.status-changed`, `payments.completed`, `supplychain.event-recorded`, `inventory.low`, `inventory.replenishment-ordered`, `media.transcoded` |
+| **Notification** | Per-user notification inbox fed by domain events, delivered over email/SMS/webhooks | `/api/notifications`, `.../read`, `.../read-all` | — | `orders.created`, `orders.status-changed`, `payments.completed`, `supplychain.event-recorded`, `inventory.low`, `inventory.replenishment-ordered`, `media.transcoded`, `products.back-in-stock` |
 
 ## 5. Event-driven design
 
@@ -187,6 +187,8 @@ flowchart LR
 
     SC -->|supplychain.event-recorded| NOTIF
 
+    CAT[Catalog] -->|products.back-in-stock| NOTIF
+
     MEDIA[Media] -->|media.uploaded| MEDIA
     MEDIA -->|media.transcoded| NOTIF
 ```
@@ -195,7 +197,9 @@ Consumers derive from `EventConsumerBackgroundService`, which subscribes on star
 processing for the lifetime of the host. Each consumer uses its own consumer group, so adding a
 new subscriber never affects existing ones. `inventory.adjusted` and `cart.item-added` are
 published as integration points for future consumers and analytics; nothing subscribes to them
-today.
+today. `products.back-in-stock` is published once per stock-alert subscriber when a product's stock
+rises from zero (a product update or a stock release, including a completed return); the alert is
+then removed, and Notification turns the event into a "back in stock" notification for that user.
 
 ## 6. Key flows
 
@@ -241,7 +245,7 @@ sequenceDiagram
     P->>O: POST /api/orders
     O->>C: validate, price and reserve each line
     Note over O,C: any failure releases the lines already reserved<br/>(409 out of stock, 400 unknown product, 503 catalog unavailable)
-    O->>O: subtotal + tax = total
+    O->>O: subtotal − coupon + delivery fee + gift wrap + tax = total
     O->>K: orders.created
     K-->>F: create shipment
     K-->>B: draft invoice
@@ -258,6 +262,22 @@ sequenceDiagram
     K-->>B: settle invoice
     K-->>N: "payment received" notification
 ```
+
+Pricing (`OrderPricing` in the order service) applies the coupon to the subtotal first; tax (8%)
+is charged on the discounted subtotal. Standard delivery (5 days) costs 4.99 and is free when the
+discounted subtotal reaches `Shipping:FreeShippingThreshold` (35 by default); Expedited (2 days)
+and One-Day cost 9.99 and 14.99, and gift wrap adds 3.99. `POST /api/orders/quote` returns the
+same breakdown, the delivery options and the estimated delivery date before anything is reserved,
+reporting an unusable coupon as `couponError`; placing the order rejects that coupon with `400`.
+An estimated delivery date is a calendar day sent as midnight UTC (today's UTC date plus the
+speed's days), and the portal formats it, like a coupon's expiry day, in UTC so it reads as the
+same day in every time zone.
+Coupons (`/api/coupons`, managed on the admin *Coupons* setup page) can be a percentage or a fixed
+amount, with an optional minimum subtotal and expiry date.
+
+*Buy Now* takes the customer from the product page to checkout with just that product, and the
+order is placed with `buyNow: true`. The cart consumer ignores such orders, so the customer's cart
+is left as it was.
 
 ### 6.3 Cancellation and refunds
 
@@ -289,7 +309,40 @@ A refund issued directly (`POST /api/payments/{id}/refund`) publishes `payments.
 status `Refunded`, which cancels the order through the same path. Stock is only returned when the
 order had not shipped.
 
-### 6.4 Media upload and transcoding
+### 6.4 Returns
+
+A delivered order can be returned for 30 days after delivery (`OrderReturns.ReturnWindowDays`).
+The customer requests the return with a reason (required, up to 500 characters); once the goods
+arrive, a fulfillment agent (or admin) completes it from the *Returns to receive* list on the
+fulfillment board. Completing a return uses the same resumable work record as cancellation, so a
+retry after a partial failure never restocks a line twice.
+
+```mermaid
+sequenceDiagram
+    participant P as Portal
+    participant O as Order
+    participant C as Catalog
+    participant K as Kafka
+    participant Pay as Payment
+    participant I as Inventory
+    participant SC as SupplyChain
+    participant N as Notification
+
+    P->>O: POST /api/orders/{id}/return (reason)
+    Note over O: only Delivered orders, within 30 days of delivery
+    O->>K: orders.status-changed (ReturnRequested)
+    K-->>SC: record the ReturnRequested stage
+    K-->>N: "order ReturnRequested" notification
+    P->>O: POST /api/orders/{id}/return/complete
+    O->>K: orders.status-changed (Returned)
+    O->>C: POST /api/products/{id}/release for each line
+    K-->>Pay: refund captured payments
+    K-->>I: reverse the recorded sale
+    K-->>SC: record the Returned stage
+    K-->>N: "order Returned" notification
+```
+
+### 6.5 Media upload and transcoding
 
 ```mermaid
 sequenceDiagram
@@ -327,17 +380,26 @@ erDiagram
     USER ||--o{ CART : owns
     USER ||--o{ ORDER : places
     USER ||--o{ NOTIFICATION : receives
+    USER ||--o{ ADDRESS : "ships to"
+    USER ||--o| WISH_LIST : keeps
+    USER ||--o{ STOCK_ALERT : subscribes
     VENDOR ||--o{ PRODUCT : sells
     PRODUCT ||--o{ CART_ITEM : "added as"
     PRODUCT ||--o| INVENTORY_ITEM : "tracked by"
     PRODUCT ||--o{ REVIEW : has
+    PRODUCT ||--o{ PRODUCT_QUESTION : "asked about"
+    PRODUCT ||--o{ STOCK_ALERT : "watched by"
+    WISH_LIST }o--o{ PRODUCT : lists
     REVIEW ||--o{ MEDIA_ASSET : attaches
     ORDER ||--|{ CART_ITEM : contains
+    COUPON |o--o{ ORDER : discounts
     ORDER ||--o| PAYMENT : "paid by"
     ORDER ||--o| INVOICE : "billed as"
     ORDER ||--o| SHIPMENT : "shipped as"
     ORDER ||--o{ SUPPLY_CHAIN_EVENT : "traced by"
 ```
+
+A cart holds two lists of `CART_ITEM` lines: the items to buy and the items saved for later.
 
 ## 8. Cross-cutting concerns
 
@@ -419,3 +481,5 @@ the published demo run without any external accounts.
 | Minimal APIs plus a shared `ServiceDefaults` | Little boilerplate and consistent cross-cutting behaviour across 15 processes | The shared library is a coupling point that must stay thin and stable |
 | Filesystem media storage with sandboxed paths | Keeps the stack runnable anywhere | Object storage would be required for multi-replica production media |
 | Third-party integrations behind interfaces, enabled by configuration | Stripe, SMTP, Twilio and webhook receivers can be swapped or disabled per environment, and tests need no credentials | A provider that is misconfigured silently falls back, so configuration must be verified per environment |
+| Rating aggregates stored on the product document | Search can filter and sort by rating, and product cards show stars, without reading every review | The aggregate is recomputed from all reviews and saved with a read-modify-write of the product, so, as with reservation, a stock change landing in that short window can be overwritten |
+| One server-side pricing implementation for quotes and orders | The total shown at checkout is the total charged, and the coupon is re-validated when the order is placed | Delivery and gift-wrap fees are constants in the order currency (USD); only the free-shipping threshold is configurable |

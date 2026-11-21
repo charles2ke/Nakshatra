@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using MongoDB.Bson.Serialization.Attributes;
 
 namespace Nakshatra.Shared.Models;
@@ -49,6 +50,22 @@ public class Product : IEntity
     public string VendorId { get; set; } = string.Empty;
     public string ImageUrl { get; set; } = string.Empty;
     public List<string> Tags { get; set; } = new();
+    /// <summary>Was-price shown struck through; the product is on deal while it is above <see cref="Price"/>.</summary>
+    public decimal? ListPrice { get; set; }
+    /// <summary>Mean star rating of the product's reviews, maintained by the catalog service.</summary>
+    public double AverageRating { get; set; }
+    public int ReviewCount { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UnixEpoch;
+    [JsonIgnore]
+    public Dictionary<string, int> StockReleaseOperations { get; set; } = new();
+    [JsonIgnore]
+    public long BackInStockVersion { get; set; }
+    [JsonIgnore]
+    public string? BackInStockProductName { get; set; }
+    [JsonIgnore]
+    public int BackInStockQuantity { get; set; }
+
+    public bool IsOnDeal() => ListPrice is { } listPrice && listPrice > Price;
 }
 
 public class CartItem
@@ -65,10 +82,55 @@ public class Cart : IEntity
     public string Id { get; set; } = string.Empty;
     public string UserId { get; set; } = string.Empty;
     public List<CartItem> Items { get; set; } = new();
+    /// <summary>Items set aside to buy later; they are not part of the subtotal or the checkout.</summary>
+    public List<CartItem> SavedForLater { get; set; } = new();
+    [JsonIgnore]
+    public long? Revision { get; set; }
+    [JsonIgnore]
+    public List<string> AppliedWishListMoves { get; set; } = new();
     [BsonIgnore]
     public decimal Subtotal => Items.Sum(i => i.Price * i.Quantity);
 }
 
+public class WishListItem
+{
+    public string ProductId { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    /// <summary>Price when the item was added, so a later price drop can be pointed out.</summary>
+    public decimal PriceWhenAdded { get; set; }
+    public DateTime AddedAt { get; set; } = DateTime.UtcNow;
+    [JsonIgnore]
+    public string EntryId { get; set; } = string.Empty;
+}
+
+public class WishList : IEntity
+{
+    // The wish list id is the owning user id so a user has exactly one list.
+    public string Id { get; set; } = string.Empty;
+    public string UserId { get; set; } = string.Empty;
+    public List<WishListItem> Items { get; set; } = new();
+    [JsonIgnore]
+    public long? Revision { get; set; }
+}
+
+/// <summary>A saved shipping address in a customer's address book.</summary>
+public class Address : IEntity
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public string UserId { get; set; } = string.Empty;
+    public string FullName { get; set; } = string.Empty;
+    public string Line1 { get; set; } = string.Empty;
+    public string Line2 { get; set; } = string.Empty;
+    public string City { get; set; } = string.Empty;
+    public string State { get; set; } = string.Empty;
+    public string PostalCode { get; set; } = string.Empty;
+    public string Country { get; set; } = string.Empty;
+    public string Phone { get; set; } = string.Empty;
+    public bool IsDefault { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+// New values are appended so statuses already stored as numbers keep their meaning.
 public enum OrderStatus
 {
     Created,
@@ -77,7 +139,18 @@ public enum OrderStatus
     Packed,
     Shipped,
     Delivered,
-    Cancelled
+    Cancelled,
+    /// <summary>The customer asked to return a delivered order.</summary>
+    ReturnRequested,
+    /// <summary>The returned goods were received, restocked and refunded.</summary>
+    Returned
+}
+
+public enum DeliverySpeed
+{
+    Standard,
+    Expedited,
+    OneDay
 }
 
 public class OrderStatusChange
@@ -100,6 +173,18 @@ public class Order : IEntity
     public string ShippingAddress { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public List<OrderStatusChange> History { get; set; } = new();
+    /// <summary>Coupon discount taken off the subtotal before tax.</summary>
+    public decimal Discount { get; set; }
+    public string CouponCode { get; set; } = string.Empty;
+    public DeliverySpeed DeliverySpeed { get; set; } = DeliverySpeed.Standard;
+    public decimal ShippingFee { get; set; }
+    public DateTime? EstimatedDelivery { get; set; }
+    public bool GiftWrap { get; set; }
+    public decimal GiftWrapFee { get; set; }
+    public string GiftMessage { get; set; } = string.Empty;
+    /// <summary>Placed with "Buy Now", bypassing the cart, so the cart must be left untouched.</summary>
+    public bool BuyNow { get; set; }
+    public string ReturnReason { get; set; } = string.Empty;
 
     /// <summary>True once the goods have left the warehouse, after which cancelling must not restock them.</summary>
     public bool HasShipped() =>
@@ -242,4 +327,10 @@ public class Review : IEntity
     public int Rating { get; set; }
     public List<string> MediaIds { get; set; } = new();
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    /// <summary>Set by the catalog when the reviewer has a paid order containing the product.</summary>
+    public bool VerifiedPurchase { get; set; }
+    /// <summary>Shoppers who found the review helpful. Never serialized to clients, so votes stay private.</summary>
+    [JsonIgnore]
+    public List<string> HelpfulVoterIds { get; set; } = new();
+    public int HelpfulCount { get; set; }
 }

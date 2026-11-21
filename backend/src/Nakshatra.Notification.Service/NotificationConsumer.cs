@@ -73,6 +73,16 @@ public static class NotificationComposer
                 Reference = envelope.Key,
                 Topic = envelope.Topic
             },
+            // Shoppers opted in with "Notify me when available", so the alert goes to them by email.
+            Topics.ProductsBackInStock => new Notification
+            {
+                UserId = GetString(root, "userId"),
+                Title = "Back in stock",
+                Body = $"{GetString(root, "productName")} is back in stock.",
+                Reference = GetString(root, "productId"),
+                Topic = envelope.Topic,
+                Channel = NotificationChannel.Email
+            },
             _ => null
         };
     }
@@ -119,7 +129,8 @@ public class NotificationConsumer : BackgroundService
         Topics.SupplyChainEventRecorded,
         Topics.InventoryLow,
         Topics.InventoryReplenishmentOrdered,
-        Topics.MediaTranscoded
+        Topics.MediaTranscoded,
+        Topics.ProductsBackInStock
     };
 
     private readonly IEventSubscriber _subscriber;

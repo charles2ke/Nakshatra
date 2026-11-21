@@ -100,7 +100,7 @@ public class OrderCreatedTracker : EventConsumerBackgroundService
             $"Order placed with {order.Items.Count} line(s).",
             "nakshatra.com",
             "customer",
-            DateTime.UtcNow.AddDays(5),
+            order.EstimatedDelivery ?? DateTime.UtcNow.Date.AddDays(5),
             ct);
     }
 }
@@ -132,6 +132,8 @@ public class OrderStatusTracker : EventConsumerBackgroundService
             OrderStatus.Shipped => (SupplyChainStage.HandedToCarrier, "Handed to the carrier.", "carrier hub"),
             OrderStatus.Delivered => (SupplyChainStage.Delivered, "Delivered to the customer.", "destination"),
             OrderStatus.Cancelled => (SupplyChainStage.Exception, "Order cancelled.", "nakshatra.com"),
+            OrderStatus.ReturnRequested => (SupplyChainStage.ReturnRequested, "Return requested by the customer.", "customer"),
+            OrderStatus.Returned => (SupplyChainStage.Returned, "Return received and refunded.", "fulfillment centre"),
             _ => (SupplyChainStage.OrderPlaced, "Order updated.", "nakshatra.com")
         };
 

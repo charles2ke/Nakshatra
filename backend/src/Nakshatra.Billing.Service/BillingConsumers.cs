@@ -81,6 +81,27 @@ public static class InvoiceFactory
             return existing;
         }
 
+        var lines = order.Items
+            .Select(i => new InvoiceLine { Description = $"{i.Name} x{i.Quantity}", Amount = i.Price * i.Quantity })
+            .ToList();
+        if (order.Discount > 0)
+        {
+            var description = string.IsNullOrWhiteSpace(order.CouponCode) ? "Discount" : $"Discount ({order.CouponCode})";
+            lines.Add(new InvoiceLine { Description = description, Amount = -order.Discount });
+        }
+
+        if (order.ShippingFee > 0)
+        {
+            lines.Add(new InvoiceLine { Description = $"Shipping ({order.DeliverySpeed})", Amount = order.ShippingFee });
+        }
+
+        if (order.GiftWrapFee > 0)
+        {
+            lines.Add(new InvoiceLine { Description = "Gift wrap", Amount = order.GiftWrapFee });
+        }
+
+        lines.Add(new InvoiceLine { Description = "Tax", Amount = order.Tax });
+
         var invoice = new Invoice
         {
             OrderId = order.Id,
@@ -89,10 +110,7 @@ public static class InvoiceFactory
             Subtotal = order.Subtotal,
             Tax = order.Tax,
             Total = order.Total,
-            Lines = order.Items
-                .Select(i => new InvoiceLine { Description = $"{i.Name} x{i.Quantity}", Amount = i.Price * i.Quantity })
-                .Append(new InvoiceLine { Description = "Tax", Amount = order.Tax })
-                .ToList()
+            Lines = lines
         };
 
         await repo.UpsertAsync(invoice, ct);

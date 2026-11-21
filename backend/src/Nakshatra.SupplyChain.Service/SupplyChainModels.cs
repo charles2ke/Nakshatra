@@ -2,7 +2,7 @@ using Nakshatra.Shared.Models;
 
 namespace Nakshatra.SupplyChain.Service;
 
-/// <summary>Stages an order or replenishment moves through, end to end.</summary>
+/// <summary>Stages an order or replenishment moves through, end to end. New stages are appended so stored values keep their meaning.</summary>
 public enum SupplyChainStage
 {
     Sourcing,
@@ -16,7 +16,9 @@ public enum SupplyChainStage
     InTransit,
     OutForDelivery,
     Delivered,
-    Exception
+    Exception,
+    ReturnRequested,
+    Returned
 }
 
 public class SupplyChainEvent

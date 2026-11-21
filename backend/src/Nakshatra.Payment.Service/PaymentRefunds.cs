@@ -51,8 +51,8 @@ public static class PaymentRefunds
 }
 
 /// <summary>
-/// Refunds captured payments automatically when an order is cancelled on <c>orders.status-changed</c>.
-/// Refunds that cannot be processed automatically are logged for manual follow-up.
+/// Refunds captured payments automatically when an order is cancelled or a return is completed on
+/// <c>orders.status-changed</c>. Refunds that cannot be processed automatically are logged for manual follow-up.
 /// </summary>
 public class RefundOnCancellationConsumer : EventConsumerBackgroundService
 {
@@ -71,7 +71,7 @@ public class RefundOnCancellationConsumer : EventConsumerBackgroundService
     protected override async Task HandleAsync(EventEnvelope envelope, IServiceProvider scopedServices, CancellationToken ct)
     {
         var order = envelope.As<Order>();
-        if (order is not { Status: OrderStatus.Cancelled })
+        if (order is not { Status: OrderStatus.Cancelled or OrderStatus.Returned })
         {
             return;
         }
@@ -86,8 +86,8 @@ public class RefundOnCancellationConsumer : EventConsumerBackgroundService
             if (outcome.Status != RefundStatus.Refunded)
             {
                 _logger.LogWarning(
-                    "Payment {PaymentId} for cancelled order {OrderId} was not refunded automatically: {Reason}",
-                    payment.Id, LogSanitizer.Sanitize(order.Id), outcome.Error);
+                    "Payment {PaymentId} for {Status} order {OrderId} was not refunded automatically: {Reason}",
+                    payment.Id, order.Status, LogSanitizer.Sanitize(order.Id), outcome.Error);
             }
         }
     }
